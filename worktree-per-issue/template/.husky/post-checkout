@@ -1,0 +1,14 @@
+#!/usr/bin/env sh
+# Fires on every `git worktree add`. git args: $1=prev-HEAD $2=new-HEAD $3=branch-flag;
+# a fresh worktree checkout is the precise signal (prev = null SHA and branch-flag = 1).
+# Shebang is REQUIRED: core.hooksPath=.husky makes git exec this file directly (without
+# it VS Code's Git fails with "cannot spawn ... Exec format error").
+[ "$1" = "0000000000000000000000000000000000000000" ] && [ "$3" = "1" ] || exit 0
+# Only act inside a Claude worktree dir; normal clones/branch switches are no-ops.
+case "$(pwd)" in */.claude/worktrees/*) ;; *) exit 0 ;; esac
+# Setup script lives in the main checkout under scripts/ (NOT .claude/: some remotes reject
+# pushed paths matching /.claude/*setup*, e.g. Azure DevOps policy VS403694; scripts/ is
+# universally safe). Resolve its root.
+repo_root="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)"
+sh "$repo_root/scripts/worktree-setup.sh"
+echo "worktree ready." >&2
