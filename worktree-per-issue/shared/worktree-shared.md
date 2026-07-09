@@ -1,8 +1,13 @@
 <!--
-  Single source of truth for behavior shared by the /worktree-create, /worktree-heal, and /worktree-remove slash commands. Injected
-  verbatim into each command at invocation via  !`cat`  (see .claude/commands/worktree-create.md, worktree-heal.md, worktree-remove.md). This file is NOT
-  a command — it lives outside .claude/commands/ so it is never registered as an invokable command.
-  Edit shared worktree behavior HERE, once. Full narrative: docs/worktrees.md.
+  Single source of truth for behavior shared by the /worktree-create, /worktree-heal, and /worktree-remove slash commands
+  (Validation, the flat-name rule, the worktree setup, the code-vs-context isolation note).
+
+  This is a BUILD INPUT, not a file that ships to targets. At install, install.sh substitutes {{WORKTREE_SETUP_SUMMARY}}
+  below and then inlines this whole block in place of the {{WORKTREE_SHARED}} placeholder at the bottom of each command
+  file (see worktree-per-issue/install.sh). The installed commands are therefore self-contained — this file is never copied
+  into the target repo.
+
+  Edit shared worktree behavior HERE, once, then re-run the installer. Full narrative: docs/worktrees.md.
 -->
 
 The numbered steps above rely on these shared conventions — apply them exactly.

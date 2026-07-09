@@ -1,7 +1,7 @@
 ---
 description: Create a git worktree for a branch (new or existing) and move into it — auto-detects which
 argument-hint: <full-branch-name, e.g. feature/<initials>/<TICKET>/<slug>>
-allowed-tools: Bash(cat:*), Bash(git worktree *), Bash(git fetch:*), Bash(git rev-parse:*), Bash(git ls-remote:*), Bash(sh:*)
+allowed-tools: Bash(git worktree *), Bash(git fetch:*), Bash(git rev-parse:*), Bash(git ls-remote:*), Bash(sh:*)
 ---
 
 Create a git worktree for `$ARGUMENTS` and relocate this session into it, per the worktree-per-issue flow (see
@@ -52,4 +52,4 @@ full flow and cleanup.
 
 ---
 
-!`cat "${CLAUDE_PROJECT_DIR:-.}/.claude/worktree-shared.md"`
+{{WORKTREE_SHARED}}

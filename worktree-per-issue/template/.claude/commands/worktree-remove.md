@@ -1,7 +1,7 @@
 ---
 description: Close (remove) a worktree — deletes the dir, and the branch if it's merged
 argument-hint: "branch name to close (from main); omit when run inside the worktree"
-allowed-tools: Bash(cat:*), Bash(git worktree *), Bash(git branch:*), Bash(git rev-parse:*)
+allowed-tools: Bash(git worktree *), Bash(git branch:*), Bash(git rev-parse:*)
 ---
 
 Close a worktree: remove its directory and, if the branch is safely merged, delete the branch too. Removal is plain git
@@ -41,4 +41,4 @@ Do these in order; STOP and report if any step fails:
 
 ---
 
-!`cat "${CLAUDE_PROJECT_DIR:-.}/.claude/worktree-shared.md"`
+{{WORKTREE_SHARED}}

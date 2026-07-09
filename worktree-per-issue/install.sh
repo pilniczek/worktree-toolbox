@@ -145,13 +145,29 @@ install_file() { # $1 = source, $2 = dest  (backs up a differing existing file)
 }
 
 # static copies
-install_file "$SRC/template/.claude/commands/worktree-create.md"   ".claude/commands/worktree-create.md"
-install_file "$SRC/template/.claude/commands/worktree-heal.md"  ".claude/commands/worktree-heal.md"
-install_file "$SRC/template/.claude/commands/worktree-remove.md" ".claude/commands/worktree-remove.md"
 install_file "$SRC/template/.husky/post-checkout"     ".husky/post-checkout"
 
-# templated: worktree-setup.sh
 GEN="$(mktemp)"
+
+# templated: the three slash commands each inline the shared block in place of their {{WORKTREE_SHARED}}
+# placeholder. The shared block (shared/worktree-shared.md) is a build input — it is NOT copied into the
+# target; its {{WORKTREE_SETUP_SUMMARY}} is substituted first, then the whole block is spliced in, so the
+# installed commands are self-contained.
+for cmd in worktree-create worktree-heal worktree-remove; do
+  WT_SUMMARY="$WT_SUMMARY" node -e '
+    const fs=require("fs");
+    let shared=fs.readFileSync(process.argv[1],"utf8");
+    shared=shared.split("{{WORKTREE_SETUP_SUMMARY}}").join(process.env.WT_SUMMARY);
+    // drop the build-input HTML comment header so it does not leak into the installed command
+    shared=shared.replace(/^<!--[\s\S]*?-->\n*/, "");
+    let cmd=fs.readFileSync(process.argv[2],"utf8");
+    cmd=cmd.split("{{WORKTREE_SHARED}}").join(shared.trimEnd());
+    fs.writeFileSync(process.argv[3],cmd);
+  ' "$SRC/shared/worktree-shared.md" "$SRC/template/.claude/commands/$cmd.md" "$GEN"
+  install_file "$GEN" ".claude/commands/$cmd.md"
+done
+
+# templated: worktree-setup.sh
 PM_INSTALL="$PM_INSTALL" STEPS_FILE="$STEPS_FILE" node -e '
   const fs=require("fs");
   let s=fs.readFileSync(process.argv[1],"utf8");
@@ -160,15 +176,6 @@ PM_INSTALL="$PM_INSTALL" STEPS_FILE="$STEPS_FILE" node -e '
   fs.writeFileSync(process.argv[2],s);
 ' "$SRC/template/scripts/worktree-setup.sh" "$GEN"
 install_file "$GEN" "scripts/worktree-setup.sh"
-
-# templated: worktree-shared.md
-WT_SUMMARY="$WT_SUMMARY" node -e '
-  const fs=require("fs");
-  let s=fs.readFileSync(process.argv[1],"utf8");
-  s=s.split("{{WORKTREE_SETUP_SUMMARY}}").join(process.env.WT_SUMMARY);
-  fs.writeFileSync(process.argv[2],s);
-' "$SRC/template/.claude/worktree-shared.md" "$GEN"
-install_file "$GEN" ".claude/worktree-shared.md"
 
 # templated: docs/worktrees.md
 PM_INSTALL="$PM_INSTALL" node -e '

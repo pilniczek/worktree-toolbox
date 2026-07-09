@@ -39,8 +39,7 @@ it would replace is backed up to `*.bak`, and re-running it changes nothing twic
 
 | Path | Purpose |
 | --- | --- |
-| `.claude/commands/worktree-create.md`, `worktree-heal.md`, `worktree-remove.md` | the three slash commands |
-| `.claude/worktree-shared.md` | behavior shared by the commands (injected via `` !`cat` ``) |
+| `.claude/commands/worktree-create.md`, `worktree-heal.md`, `worktree-remove.md` | the three slash commands (self-contained; the installer inlines their shared behavior block) |
 | `.husky/post-checkout` | convenience hook: runs the setup script on a bare-CLI `git worktree add` |
 | `scripts/worktree-setup.sh` | per-worktree setup (`node_modules`, your setup steps, `.worktreeinclude` config) |
 | `docs/worktrees.md` | full documentation of the flow |

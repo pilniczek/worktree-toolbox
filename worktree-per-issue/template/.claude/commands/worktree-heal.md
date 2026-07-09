@@ -1,7 +1,7 @@
 ---
 description: Heal (re-provision) a worktree — force-re-runs the worktree setup
 argument-hint: "full-branch-name (optional — omit to heal the current worktree)"
-allowed-tools: Bash(cat:*), Bash(cd:*), Bash(sh:*)
+allowed-tools: Bash(cd:*), Bash(sh:*)
 ---
 
 Heal a worktree by force-re-running its setup (`scripts/worktree-setup.sh --force`), which rebuilds everything: it
@@ -25,4 +25,4 @@ order; STOP and report if any step fails:
 
 ---
 
-!`cat "${CLAUDE_PROJECT_DIR:-.}/.claude/worktree-shared.md"`
+{{WORKTREE_SHARED}}

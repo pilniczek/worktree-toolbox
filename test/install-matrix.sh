@@ -70,8 +70,15 @@ assert_no_bak() {  # a *.bak proves an installer overwrote a differing existing 
 assert_W() {  # worktree-per-issue artifacts (installed into the target project)
   for f in worktree-create worktree-heal worktree-remove; do
     assert_file "$TARGET/.claude/commands/$f.md"
+    # the shared block is inlined at install — each command must be self-contained…
+    assert_grep '**Flat name.**'           "$TARGET/.claude/commands/$f.md"
+    assert_grep 'Code vs context isolation' "$TARGET/.claude/commands/$f.md"
+    # …with no unsubstituted marker and no runtime cat-injection left behind
+    grep -qF '{{WORKTREE_SHARED}}' "$TARGET/.claude/commands/$f.md" && fail "unsubstituted {{WORKTREE_SHARED}} in $f.md"
+    grep -qF '!`cat'               "$TARGET/.claude/commands/$f.md" && fail "leftover !\`cat injection in $f.md"
   done
-  assert_file "$TARGET/.claude/worktree-shared.md"
+  # the shared block is a toolbox-side build input — it must NOT be shipped into the target
+  assert_absent "$TARGET/.claude/worktree-shared.md" "worktree-shared.md should not be installed"
   assert_file "$TARGET/.husky/post-checkout"
   assert_file "$TARGET/scripts/worktree-setup.sh"
   assert_file "$TARGET/docs/worktrees.md"
