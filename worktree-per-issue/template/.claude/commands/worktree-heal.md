@@ -1,7 +1,7 @@
 ---
 description: Heal (re-provision) a worktree — force-re-runs the worktree setup
 argument-hint: "full-branch-name (optional — omit to heal the current worktree)"
-allowed-tools: Bash(cd:*), Bash(sh:*)
+allowed-tools: Bash(cd:*), Bash(sh:*), Bash(git worktree *), Bash(git check-ref-format:*)
 ---
 
 Heal a worktree by force-re-running its setup (`scripts/worktree-setup.sh --force`), which rebuilds everything: it
@@ -11,7 +11,8 @@ order; STOP and report if any step fails:
 
 1. **Locate the worktree.**
    - If `$ARGUMENTS` is given, validate it (see **Validation**), derive the flat name (see **Flat name**), and confirm
-     `.claude/worktrees/<flat>` exists. If it does not, STOP and tell me — use `/worktree-create` to create it first.
+     `.claude/worktrees/<flat>` appears in `git worktree list`. If it does not, STOP and tell me — use `/worktree-create`
+     to create it first.
    - If `$ARGUMENTS` is empty, heal the **current** worktree. Confirm this session is inside one
      (`pwd` matches `*/.claude/worktrees/*`); if not, STOP and ask me which worktree to heal.
 

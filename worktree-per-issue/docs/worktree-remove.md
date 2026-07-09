@@ -57,7 +57,7 @@ flowchart TD
 ```mermaid
 flowchart TD
   start(["/worktree-remove &lt;branch&gt;<br/>(run from the main checkout)"])
-  start --> validate["Validate the branch name + derive flat<br/>(contains '/', no spaces)"]
+  start --> validate["Validate the branch name + derive flat<br/>(must be a valid git branch name)"]
   validate --> live{"A live worktree?<br/>(shows in git worktree list)"}
   live -->|"no"| stopB["STOP — not a live worktree"]
   live -->|"yes"| removedir["git worktree remove .claude/worktrees/&lt;flat&gt;"]

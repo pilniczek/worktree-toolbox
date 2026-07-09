@@ -12,8 +12,18 @@
 
 The numbered steps above rely on these shared conventions — apply them exactly.
 
-**Validation.** `$ARGUMENTS` must be non-empty and look like a branch path (contains `/`, no spaces). If not, STOP and
-ask me for the full branch name.
+**Validation.** `$ARGUMENTS` must be non-empty and a legal git branch name — check with
+`git check-ref-format --branch "$ARGUMENTS"` (this is git's own rule: rejects spaces, `..`, `~^:?*`, and a leading `-`
+that could be mistaken for a git option). Two — and only two — outcomes stop the command:
+
+- **Empty** → STOP and ask me for the full branch name.
+- **Non-empty but not a legal git branch name** → STOP and report *why* (name the offending part, e.g. "contains a
+  space").
+
+Otherwise the name is **FINAL**: use it verbatim. Do **not** ask to confirm it, rephrase it, split or reformat it, or
+flag it as a possible typo/mistake — the `feature/<initials>/<TICKET>/<slug>` shape in the argument hint is a *suggestion*,
+not a requirement, and a short or unusual name (e.g. `hotfix`, `feature/tst`) is a valid, deliberate choice. The loud
+post-action report is what surfaces a genuine slip, not a question up front.
 
 **Flat name.** The worktree directory is `.claude/worktrees/<flat>`, where `<flat>` is `$ARGUMENTS` with every `/`
 replaced by `+` (e.g. `feature/abc/TICKET-123/some-slug` → `feature+abc+TICKET-123+some-slug`). Leave the directory name

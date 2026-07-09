@@ -35,11 +35,11 @@ tool does not depend on it.
 ```mermaid
 flowchart TD
   start(["/worktree-create &lt;full-branch-name&gt;"])
-  start --> validate["Validate the name<br/>(must contain '/', no spaces — else STOP and ask)"]
+  start --> validate["Validate the name<br/>(must be a valid git branch name — else STOP and report)"]
   validate --> fetch["git fetch origin<br/>(refresh remote-tracking refs)"]
   fetch --> prune["git worktree prune<br/>(clear records of already-deleted worktrees)"]
   prune --> exists{"Branch exists?<br/>(local: rev-parse · origin: ls-remote)"}
-  exists -->|"no"| createnew["git worktree add -b &lt;name&gt; … origin/main<br/>(create a NEW branch off fresh trunk)"]
+  exists -->|"no"| createnew["git worktree add -b &lt;name&gt; … origin/HEAD<br/>(create a NEW branch off the fresh default branch)"]
   exists -->|"yes"| checkout["git worktree add … &lt;name&gt;<br/>(check out EXISTING; remote-only → tracking branch)"]
   createnew --> reportnew["Report: created NEW branch off trunk"]
   checkout --> reportold["Report: checked out EXISTING shared branch<br/>(don't force-push / -D without coordinating)"]

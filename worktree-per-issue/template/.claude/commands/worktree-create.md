@@ -1,7 +1,7 @@
 ---
 description: Create a git worktree for a branch (new or existing) and move into it — auto-detects which
 argument-hint: <full-branch-name, e.g. feature/<initials>/<TICKET>/<slug>>
-allowed-tools: Bash(git worktree *), Bash(git fetch:*), Bash(git rev-parse:*), Bash(git ls-remote:*), Bash(sh:*)
+allowed-tools: Bash(git worktree *), Bash(git fetch:*), Bash(git rev-parse:*), Bash(git ls-remote:*), Bash(git check-ref-format:*), Bash(git symbolic-ref:*), Bash(sh:*)
 ---
 
 Create a git worktree for `$ARGUMENTS` and relocate this session into it, per the worktree-per-issue flow (see
@@ -21,9 +21,11 @@ is parsed, defaulted, or derived. Do these in order; STOP and report if any step
    - on the remote: `git ls-remote --exit-code --heads origin "$ARGUMENTS"`
 
 4. **Create the worktree** at `.claude/worktrees/<flat>` (see **Flat name**). Exactly one action is valid:
-   - **Neither exists → NEW branch:** `git worktree add -b "$ARGUMENTS" ".claude/worktrees/<flat>" origin/main`
-     (bases the new branch on freshly-fetched trunk regardless of this window's state — use your repo's default branch if
-     it is not `main`).
+   - **Neither exists → NEW branch:** base it on the repo's default branch, resolved (not assumed) from the remote:
+     `BASE="$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || echo origin/main)"`, then
+     `git worktree add -b "$ARGUMENTS" ".claude/worktrees/<flat>" "$BASE"`. This bases the new branch on freshly-fetched
+     trunk regardless of this window's state, and works whether the default branch is `main`, `master`, or anything else
+     (falling back to `origin/main` only if `origin/HEAD` is unset).
    - **Exists (local or remote) → EXISTING branch:** `git worktree add ".claude/worktrees/<flat>" "$ARGUMENTS"`
      (a remote-only branch makes git DWIM a local tracking branch). If git reports the branch is already checked out in
      another worktree, STOP and report.
@@ -36,8 +38,10 @@ is parsed, defaulted, or derived. Do these in order; STOP and report if any step
    husky installed, `post-checkout` already ran this on the `git worktree add`; the run-once marker makes this a fast
    no-op. If a step fails, report it — the rest still completes.
 
-7. **Report — loudly and exactly** which action was taken, so a typo or name collision is obvious immediately, and that
-   you are now working inside the worktree:
+7. **Report — loudly and exactly** which action was taken (NEW vs EXISTING) and that you are now working inside the
+   worktree. This factual after-the-fact report is the safety net: seeing the exact branch name and action makes an
+   accidental stray branch or name collision obvious right away — so there is never a need to second-guess the name
+   beforehand.
    - NEW: "Branch not found on local/origin → created **NEW** branch `$ARGUMENTS` off trunk. You are now in the worktree,
      ready to work."
    - EXISTING: "Found `$ARGUMENTS` (local/remote) → checked out **EXISTING SHARED** branch (do **not** force-push or
