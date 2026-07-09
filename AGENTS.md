@@ -20,9 +20,10 @@ read the one for the tool you're touching:
 Every `install.sh` is POSIX `#!/usr/bin/env sh` with `set -eu` and `say`/`die` helpers. Keep new
 installers consistent with these rules:
 
-- **Additive and idempotent — never clobber.** Skip when identical (`cmp -s`), back up any
-  file you replace to `*.bak`, and append to `.gitignore` only if the line is absent. A
-  second run must report "unchanged", not overwrite.
+- **Additive config, idempotent files.** Skip when identical (`cmp -s`); overwrite differing
+  toolbox-owned files in place (they're git-tracked, so `git diff` is the safety net); merge
+  config additively so user values are never lost; and append to `.gitignore` only if the
+  line is absent. A second run must report "unchanged", not rewrite.
 - **Env overrides** for testing and forks, honored by all three installers:
   - `WORKTREE_TOOLBOX_REPO` — `owner/repo` to fetch (default `pilniczek/worktree-toolbox`).
   - `WORKTREE_TOOLBOX_REF` — branch/tag/sha (default `main`).

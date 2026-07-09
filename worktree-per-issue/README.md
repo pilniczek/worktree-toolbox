@@ -32,8 +32,9 @@ Run from the **root of the target git repo**:
 curl -fsSL https://raw.githubusercontent.com/pilniczek/worktree-toolbox/main/worktree-per-issue/install.sh | sh
 ```
 
-The installer only adds; it never overwrites your existing config values. Any file
-it would replace is backed up to `*.bak`, and re-running it changes nothing twice.
+The installer only adds; it never overwrites your existing config values. Files it
+replaces are overwritten in place (review with `git diff`), and re-running it changes
+nothing twice.
 
 ## What it installs
 

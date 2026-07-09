@@ -134,10 +134,10 @@ say ""
 say "Installing files:"
 mkdir -p .claude/commands .husky scripts docs
 
-install_file() { # $1 = source, $2 = dest  (backs up a differing existing file)
+install_file() { # $1 = source, $2 = dest  (overwrites a differing existing file in place)
   if [ -f "$2" ]; then
     if cmp -s "$1" "$2"; then say "  = $2 (unchanged)"; return 0; fi
-    cp "$2" "$2.bak"; say "  ~ $2 (existing backed up to $2.bak)"
+    say "  ~ $2 (replaced; review with git diff)"
   else
     say "  + $2"
   fi
@@ -229,7 +229,7 @@ say ""
 say "Done. worktree-toolbox installed."
 say ""
 say "Next steps:"
-say "  1. Review the changes (git diff) and any *.bak backups."
+say "  1. Review the changes (git diff)."
 say "  2. Run '$PM_INSTALL' once to wire up the husky hook (if you use husky)."
 say "  3. For a sibling-repo link (shared library / knowledge base), edit the marked block in"
 say "     scripts/worktree-setup.sh — see the 'Project-specific sibling links' section of docs/worktrees.md."

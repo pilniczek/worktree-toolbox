@@ -27,10 +27,8 @@ cd .claude/worktrees/<flat>
 claude                 # a fresh, isolated Claude context for another issue
 ```
 
-Any way of starting Claude in that folder works. The sibling
-[vscode-claude-tabs](../../vscode-claude-tabs/) tool is one convenience for this (a
-`Ctrl+Alt+W` "Claude tab per worktree" keybinding), but it is fully optional — this
-tool does not depend on it.
+Any way of starting Claude in that folder works — a new terminal, a new IDE window, or
+a per-worktree editor tab. None of it is required by this tool.
 
 ```mermaid
 flowchart TD

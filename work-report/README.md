@@ -13,8 +13,7 @@ intent from the raw diff. The point is **efficiency**: a concise report is a fas
 for the next step than studying the changes.
 
 It works **anywhere** — a git worktree, the main checkout, or any git repo. It does **not**
-require a worktree, so it's useful on its own or alongside the sibling
-[`worktree-per-issue`](../worktree-per-issue/) tool.
+require a worktree, so it's useful on its own or alongside any worktree-based workflow.
 
 ## One living report per working tree
 
@@ -51,9 +50,9 @@ Run from **inside the target git repo**:
 curl -fsSL https://raw.githubusercontent.com/pilniczek/worktree-toolbox/main/work-report/install.sh | sh
 ```
 
-It adds `.claude/commands/work-report.md` and a `WORK-REPORT.md` entry to `.gitignore`. Any
-existing command file it would replace is backed up to `*.bak`; re-running changes nothing
-twice.
+It adds `.claude/commands/work-report.md` and a `WORK-REPORT.md` entry to `.gitignore`. An
+existing command file it replaces is overwritten in place (review with `git diff`);
+re-running changes nothing twice.
 
 ## Where it lives, and git
 

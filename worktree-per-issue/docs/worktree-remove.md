@@ -3,14 +3,18 @@
 > Part of [worktree-per-issue](../README.md). Removes a worktree and, if safe,
 > deletes its branch.
 
-Claude's native worktree auto-cleanup does not apply here — `ExitWorktree` won't
-remove a worktree created with `git worktree add` and entered by path, so it's a
-no-op on ours (by design). Closing is explicit.
+Removal always runs against the **main checkout** via `git -C`, so it never needs to
+step the session out first — it works whether you're in main, in a worktree the
+`/worktree-create` flow moved you into, or a separate Claude session launched
+**directly inside** the worktree (which has no `EnterWorktree` session to exit).
+Claude's native `ExitWorktree` is not used. Closing is explicit.
 
 `/worktree-remove` has two modes, chosen by where you run it:
 
-- **inside a worktree** — run `/worktree-remove` (no argument) to close _that_ one. It
-  steps back to main first (git won't remove the tree you're in).
+- **inside a worktree** — run `/worktree-remove` (no argument) to close _that_ one.
+  Removal deletes the folder you're standing in, so if this session was started inside
+  that worktree its directory no longer exists afterwards — close it and continue from
+  the main checkout.
 - **from the main checkout** — run `/worktree-remove <branch>` to close a named one.
 
 The wrong combination (an argument inside a worktree, or none from main) stops with a
@@ -27,8 +31,8 @@ flowchart TD
   start --> inside{"Inside a worktree?"}
   inside -->|"no"| stopA["STOP — nothing to close here<br/>(use /worktree-remove &lt;branch&gt; from main)"]
   inside -->|"yes"| capture["Capture flat + branch from pwd"]
-  capture --> exitwt["ExitWorktree action=keep<br/>(return to main — can't remove the tree you occupy)"]
-  exitwt --> removedir["git worktree remove .claude/worktrees/&lt;flat&gt;<br/>(refuses if the working tree is dirty)"]
+  capture --> findmain["Find main checkout &lt;main&gt;<br/>(first entry of git worktree list)"]
+  findmain --> removedir["git -C &lt;main&gt; worktree remove &lt;main&gt;/.claude/worktrees/&lt;flat&gt;<br/>(refuses if the working tree is dirty)"]
 
   subgraph shared["shared below"]
     direction TB
@@ -40,14 +44,14 @@ flowchart TD
     merged -->|"no"| kept["Branch KEPT and reported<br/>(commits safe; never -D, never the remote)"]
     gone --> prune["git worktree prune"]
     kept --> prune
-    prune --> report(["Report: dir removed · branch deleted/kept · now in main"])
+    prune --> report(["Report: dir removed · branch deleted/kept · worktree folder gone (if the session was started inside it, close it)"])
   end
 
   removedir --> clean
 
   classDef step fill:#eaeaea,stroke:#888,color:#000;
   classDef stop fill:#f8d7da,stroke:#d9534f,color:#000;
-  class start,inside,capture,exitwt,removedir,clean,delbranch,merged,gone,prune,report step;
+  class start,inside,capture,findmain,removedir,clean,delbranch,merged,gone,prune,report step;
   class stopA,stopdirty,kept stop;
   style shared fill:#eef4ff,stroke:#3d7bd6;
 ```
@@ -60,7 +64,7 @@ flowchart TD
   start --> validate["Validate the branch name + derive flat<br/>(must be a valid git branch name)"]
   validate --> live{"A live worktree?<br/>(shows in git worktree list)"}
   live -->|"no"| stopB["STOP — not a live worktree"]
-  live -->|"yes"| removedir["git worktree remove .claude/worktrees/&lt;flat&gt;"]
+  live -->|"yes"| removedir["git -C &lt;main&gt; worktree remove &lt;main&gt;/.claude/worktrees/&lt;flat&gt;"]
   removedir --> rest["Continue in the shared tail of /worktree-remove above<br/>(clean? → git branch -d → merged? → prune → report)"]
 
   classDef step fill:#eaeaea,stroke:#888,color:#000;

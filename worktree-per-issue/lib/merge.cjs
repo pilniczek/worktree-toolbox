@@ -54,16 +54,20 @@ function bailUnparseable(snippet) {
 }
 
 if (mode === 'settings') {
+  // Bash(git -C:*) covers /worktree-remove running `git -C "<main>" worktree remove …` from inside a worktree.
+  const allow = ['Bash(git worktree *)', 'Bash(git -C:*)'];
   if (obj === null) {
-    bailUnparseable(`  permissions.allow += "Bash(git worktree *)"`);
+    bailUnparseable(allow.map((p) => `  permissions.allow += "${p}"`).join('\n'));
   }
   // permissions.allow
   obj.permissions = obj.permissions || {};
   obj.permissions.allow = obj.permissions.allow || [];
-  if (pushUnique(obj.permissions.allow, 'Bash(git worktree *)')) {
-    notes.push('added permissions.allow "Bash(git worktree *)"');
-  } else {
-    notes.push('permissions.allow already had "Bash(git worktree *)"');
+  for (const p of allow) {
+    if (pushUnique(obj.permissions.allow, p)) {
+      notes.push(`added permissions.allow "${p}"`);
+    } else {
+      notes.push(`permissions.allow already had "${p}"`);
+    }
   }
   writeJson(filePath, obj);
 } else if (mode === 'vscode') {

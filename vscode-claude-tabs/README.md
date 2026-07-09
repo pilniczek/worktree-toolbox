@@ -97,23 +97,8 @@ exec node "$HOME/.claude/scripts/gen-claude-tabs-keybinding.js"
 (A shell can't press the key for you, so afterwards you press `Ctrl+Alt+W` to open the tabs — the new worktree is now
 included.)
 
-### Auto-refresh with `worktree-per-issue`
-
-If you use the sibling [`worktree-per-issue`](../worktree-per-issue/) tool, its `/worktree-create` creates worktrees
-with plain `git worktree add` (then enters by path), so Claude's native worktree hook `open-worktree-terminal.sh` never
-fires. Instead, wire the generator into that tool's `scripts/worktree-setup.sh` (which runs on every worktree create —
-via `post-checkout` and the `/worktree-create` provision step), so the binding refreshes whenever a worktree is created.
-Append this guarded block after the provisioning steps:
-
-```sh
-if [ -f "$HOME/.claude/scripts/gen-claude-tabs-keybinding.js" ]; then
-  node "$HOME/.claude/scripts/gen-claude-tabs-keybinding.js" >/dev/null 2>&1 || true
-fi
-```
-
-It's a no-op when this tool isn't installed, and `|| true` keeps it from ever failing setup (which runs
-under `set -e`). The generator re-reads the full `git worktree list`, so one refresh reflects every
-worktree. Then press `Ctrl+Alt+W` — no window reload needed (VS Code hot-applies `keybindings.json`).
+If your worktrees are created by a tool that bypasses that native hook, wire the generator into its
+per-worktree setup instead — see the [toolbox README](../README.md) for a ready-made recipe.
 
 ## Customize
 

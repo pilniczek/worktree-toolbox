@@ -56,7 +56,7 @@ mkdir -p .claude/commands
 DEST=".claude/commands/work-report.md"
 if [ -f "$DEST" ]; then
   if cmp -s "$SRC/$CMD" "$DEST"; then say "  = $DEST (unchanged)";
-  else cp "$DEST" "$DEST.bak"; cp "$SRC/$CMD" "$DEST"; say "  ~ $DEST (existing backed up to $DEST.bak)"; fi
+  else cp "$SRC/$CMD" "$DEST"; say "  ~ $DEST (replaced; review with git diff)"; fi
 else
   cp "$SRC/$CMD" "$DEST"; say "  + $DEST"
 fi

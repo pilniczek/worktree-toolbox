@@ -62,10 +62,8 @@ cd .claude/worktrees/<flat>
 claude                 # a fresh, isolated Claude context for another issue
 ```
 
-Any way of starting Claude in that folder works (a new terminal, a new IDE window, or a per-worktree editor tab). The
-sibling `vscode-claude-tabs` tool is one optional convenience for this (a `Ctrl+Alt+W` "Claude tab per worktree"
-keybinding), but this toolbox does not depend on it — and it is not needed to work on the worktree `/worktree-create` just dropped you
-into.
+Any way of starting Claude in that folder works (a new terminal, a new IDE window, or a per-worktree editor tab) — none
+of it is required, and none of it is needed to work on the worktree `/worktree-create` just dropped you into.
 
 ```mermaid
 flowchart TD
@@ -144,10 +142,8 @@ intentionally not configured by the installer, because sibling layouts vary per 
 
 ## Reporting work
 
-To leave a standalone summary of what was done in a worktree (for a reviewer, or a session that resumes the work later),
-use the sibling [`work-report`](https://github.com/pilniczek/worktree-toolbox/tree/main/work-report) tool: its
-`/work-report` command writes a single `WORK-REPORT.md` at the working tree's root. It is a separate, optional install —
-this toolbox does not depend on it, and `work-report` itself works in any repo, worktree or not.
+To hand a worktree off — to a reviewer, or to a session that resumes the work later — leave a short standalone summary
+of what was done at the working tree's root, so the branch carries its own context.
 
 ## Pushing
 
@@ -156,14 +152,17 @@ this toolbox does not depend on it, and `work-report` itself works in any repo, 
 
 ## Cleanup
 
-Nothing here uses Claude's native worktree auto-cleanup — `ExitWorktree` will not remove a worktree created with
-`git worktree add` and entered by path, so it is a no-op on ours (by design). Closing is explicit.
+Nothing here uses Claude's native worktree auto-cleanup. Removal always runs against the **main checkout** via
+`git -C "<main>"`, so it never needs to step the session out first (`ExitWorktree` is not used) — it works whether you're
+in main, in a worktree `/worktree-create` moved you into, or a separate Claude session launched **directly inside** the
+worktree (which has no `EnterWorktree` session to exit). Closing is explicit.
 
 **Close a worktree — `/worktree-remove`.** The normal way to finish, in two modes chosen by where you run it:
-**inside a worktree**, run `/worktree-remove` (no argument) to close _that_ one — it steps back to main first (git won't
-remove the tree you occupy); **from the main checkout**, run `/worktree-remove <branch>` to close a named one. The wrong
-combination (an argument inside a worktree, or none from main) stops with a hint. It runs `git worktree remove` (refuses
-if the worktree is dirty) then `git branch -d`, which
+**inside a worktree**, run `/worktree-remove` (no argument) to close _that_ one — removal deletes the folder you're
+standing in, so if this session was started inside that worktree, close it afterwards and continue from the main
+checkout; **from the main checkout**, run
+`/worktree-remove <branch>` to close a named one. The wrong combination (an argument inside a worktree, or none from
+main) stops with a hint. It runs `git worktree remove` (refuses if the worktree is dirty) then `git branch -d`, which
 deletes the branch **only if it is merged into your trunk** — an unmerged branch is kept and reported, so no commits are
 ever lost. It never force-removes, never uses `git branch -D`, and never touches the remote.
 
@@ -175,8 +174,8 @@ flowchart TD
   start --> inside{"Inside a worktree?"}
   inside -->|"no"| stopA["STOP — nothing to close here<br/>(use /worktree-remove &lt;branch&gt; from main)"]
   inside -->|"yes"| capture["Capture flat + branch from pwd"]
-  capture --> exitwt["ExitWorktree action=keep<br/>(return to main — can't remove the tree you occupy)"]
-  exitwt --> removedir["git worktree remove .claude/worktrees/&lt;flat&gt;<br/>(refuses if the working tree is dirty)"]
+  capture --> findmain["Find main checkout &lt;main&gt;<br/>(first entry of git worktree list)"]
+  findmain --> removedir["git -C &lt;main&gt; worktree remove &lt;main&gt;/.claude/worktrees/&lt;flat&gt;<br/>(refuses if the working tree is dirty)"]
 
   subgraph shared["shared tail — reused by /worktree-remove &lt;branch&gt;"]
     direction TB
@@ -188,14 +187,14 @@ flowchart TD
     merged -->|"no"| kept["Branch KEPT and reported<br/>(commits safe; never -D, never the remote)"]
     gone --> prune["git worktree prune"]
     kept --> prune
-    prune --> report(["Report: dir removed · branch deleted/kept · now in main"])
+    prune --> report(["Report: dir removed · branch deleted/kept · worktree folder gone (if the session was started inside it, close it)"])
   end
 
   removedir --> clean
 
   classDef step fill:#eaeaea,stroke:#888,color:#000;
   classDef stop fill:#f8d7da,stroke:#d9534f,color:#000;
-  class start,inside,capture,exitwt,removedir,clean,delbranch,merged,gone,prune,report step;
+  class start,inside,capture,findmain,removedir,clean,delbranch,merged,gone,prune,report step;
   class stopA,stopdirty,kept stop;
   style shared fill:#eef4ff,stroke:#3d7bd6;
 ```
@@ -208,7 +207,7 @@ flowchart TD
   start --> validate["Validate the branch name + derive flat<br/>(must be a valid git branch name)"]
   validate --> live{"A live worktree?<br/>(shows in git worktree list)"}
   live -->|"no"| stopB["STOP — not a live worktree"]
-  live -->|"yes"| removedir["git worktree remove .claude/worktrees/&lt;flat&gt;"]
+  live -->|"yes"| removedir["git -C &lt;main&gt; worktree remove &lt;main&gt;/.claude/worktrees/&lt;flat&gt;"]
   removedir --> rest["Continue in the shared tail of /worktree-remove above<br/>(clean? → git branch -d → merged? → prune → report)"]
 
   classDef step fill:#eaeaea,stroke:#888,color:#000;
@@ -249,7 +248,7 @@ shared block is copied into each.
 
 **Do not hand-edit the shared block in the installed command files** — the three copies would drift. To change shared
 behavior, edit `shared/worktree-shared.md` in the toolbox **once** and re-run the installer; it re-inlines the block into
-all three commands (backing up any locally modified command to `*.bak`).
+all three commands (overwriting any locally modified command in place - review with `git diff`).
 
 ### Why inline at install and not `` !`cat` `` or `@import`
 

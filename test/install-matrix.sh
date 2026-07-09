@@ -4,7 +4,8 @@
 # The three tools (worktree-per-issue=W, work-report=R, vscode-claude-tabs=V) are advertised as
 # independently installable — "use any alone or together." This test installs each of the 7
 # non-empty combinations into a throwaway git repo and asserts they do not collide: expected
-# artifacts land, no installer clobbers another's file (a *.bak would prove it did), the shared
+# artifacts land, no installer clobbers another's file (a `~ (replaced)` line in the installer
+# log would prove it did), the shared
 # .gitignore gets each entry exactly once, V stays user-global, and re-runs are idempotent.
 #
 # Fully OFFLINE — installs from the local checkout via each installer's WORKTREE_TOOLBOX_SRC
@@ -62,9 +63,9 @@ assert_absent()  { [ -e "$1" ] && fail "unexpected path present: ${2:-$1}"; retu
 assert_grep()    { grep -qF "$1" "$2" 2>/dev/null || fail "expected '$1' in ${3:-$2}"; }
 count_lines()    { [ -f "$2" ] && grep -cxF "$1" "$2" || echo 0; }  # exact whole-line matches
 
-assert_no_bak() {  # a *.bak proves an installer overwrote a differing existing file → collision
-  baks="$(find "$TARGET" -name '*.bak' 2>/dev/null)"
-  [ -z "$baks" ] || fail "unexpected .bak files (collision): $(echo "$baks" | tr '\n' ' ')"
+assert_no_clobber() {  # a "~ (replaced)" line proves an installer overwrote a differing existing file → collision
+  clob="$(grep -F '  ~ ' "$LOG" 2>/dev/null || true)"
+  [ -z "$clob" ] || fail "installer clobbered a differing existing file (collision): $(echo "$clob" | tr '\n' ' ')"
 }
 
 assert_W() {  # worktree-per-issue artifacts (installed into the target project)
@@ -84,6 +85,7 @@ assert_W() {  # worktree-per-issue artifacts (installed into the target project)
   assert_file "$TARGET/docs/worktrees.md"
   assert_file "$TARGET/.worktreeinclude"
   assert_grep 'Bash(git worktree *)' "$TARGET/.claude/settings.json"
+  assert_grep 'Bash(git -C:*)'       "$TARGET/.claude/settings.json"
   assert_grep 'git.detectWorktrees'  "$TARGET/.vscode/settings.json"
   [ "$(count_lines '.claude/worktrees/' "$TARGET/.gitignore")" = 1 ] \
     || fail ".claude/worktrees/ not exactly once in .gitignore"
@@ -156,7 +158,7 @@ run_combo() {  # $1 = human label, $2 = install-order string of letters (e.g. "W
   case "$order" in *W*) assert_W ;; esac
   case "$order" in *R*) assert_R ;; esac
   case "$order" in *V*) assert_V ;; esac
-  assert_no_bak
+  assert_no_clobber
   # V installed alone must leave the project completely untouched
   if [ "$order" = "V" ]; then
     assert_absent "$TARGET/.claude"        "V wrote into the project (.claude)"
@@ -168,7 +170,7 @@ run_combo() {  # $1 = human label, $2 = install-order string of letters (e.g. "W
   case "$order" in *W*) install_W || fail "worktree-per-issue reinstall exited nonzero" ;; esac
   case "$order" in *R*) install_R || fail "work-report reinstall exited nonzero" ;; esac
   case "$order" in *V*) install_V || fail "vscode-claude-tabs reinstall exited nonzero" ;; esac
-  assert_no_bak
+  assert_no_clobber
   case "$order" in *W*) [ "$(count_lines '.claude/worktrees/' "$TARGET/.gitignore")" = 1 ] \
       || fail ".claude/worktrees/ duplicated in .gitignore after reinstall" ;; esac
   case "$order" in *R*) [ "$(count_lines '/WORK-REPORT.md' "$TARGET/.gitignore")" = 1 ] \

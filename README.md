@@ -36,6 +36,26 @@ curl -fsSL https://raw.githubusercontent.com/pilniczek/worktree-toolbox/main/vsc
 
 See each tool's README for what it prompts for, requirements, and customization.
 
+## Using them together
+
+The tools stand alone, but one integration is worth wiring up.
+
+**Refresh the `vscode-claude-tabs` binding whenever `worktree-per-issue` creates a worktree.**
+`worktree-per-issue`'s `/worktree-create` uses plain `git worktree add` (then enters by path), so
+Claude Code's native `open-worktree-terminal.sh` hook never fires. Instead, append this guarded block
+after the provisioning steps in that tool's `scripts/worktree-setup.sh` (it runs on every worktree
+create — via `post-checkout` and the `/worktree-create` provision step):
+
+```sh
+if [ -f "$HOME/.claude/scripts/gen-claude-tabs-keybinding.js" ]; then
+  node "$HOME/.claude/scripts/gen-claude-tabs-keybinding.js" >/dev/null 2>&1 || true
+fi
+```
+
+It's a no-op when `vscode-claude-tabs` isn't installed, and `|| true` keeps it from ever failing setup
+(which runs under `set -e`). The generator re-reads the full `git worktree list`, so one refresh reflects
+every worktree. Then press `Ctrl+Alt+W` — no window reload needed (VS Code hot-applies `keybindings.json`).
+
 ## Requirements
 
 - `git` for all three; `worktree-per-issue` and `vscode-claude-tabs` also need `node`; `curl` + `tar` for the hosted one-liners.
