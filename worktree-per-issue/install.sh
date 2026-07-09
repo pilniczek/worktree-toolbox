@@ -124,10 +124,22 @@ else
 fi
 
 # ---------------------------------------------------------------------------- worktreeinclude
+INCLUDE_FILE="$(mktemp)"
 say ""
-INCLUDE_DEFAULT=".claude/settings.local.json"
-[ -f .env ] && INCLUDE_DEFAULT=".env $INCLUDE_DEFAULT"
-INCLUDE_LIST="$(ask "Gitignored files to copy into each worktree (space-separated)" "$INCLUDE_DEFAULT")"
+say "Gitignored files to copy into each new worktree (e.g. .env, local settings)."
+say "Leave the path blank to finish."
+[ -f .env ] && { printf '%s\n' ".env" >> "$INCLUDE_FILE"; say "    added: .env"; }
+if [ "$INTERACTIVE" = 1 ]; then
+  inc_default=".claude/settings.local.json"
+  while :; do
+    entry="$(ask "  file to copy (blank = done)" "$inc_default")"
+    inc_default=""                       # default is offered on the first line only
+    [ -z "$entry" ] && break
+    printf '%s\n' "$entry" >> "$INCLUDE_FILE"; say "    added: $entry"
+  done
+else
+  printf '%s\n' ".claude/settings.local.json" >> "$INCLUDE_FILE"
+fi
 
 # ---------------------------------------------------------------------------- write files
 say ""
@@ -209,10 +221,10 @@ TMP_INC="$(mktemp)"
 {
   printf '# Gitignored files a fresh worktree needs — copied into each new worktree by Claude Code.\n'
   printf '# Syntax is gitignore-style. See docs/worktrees.md.\n'
-  for f in $INCLUDE_LIST; do printf '%s\n' "$f"; done
+  cat "$INCLUDE_FILE"
 } > "$TMP_INC"
 install_file "$TMP_INC" ".worktreeinclude"
-rm -f "$TMP_INC" "$STEPS_FILE"
+rm -f "$TMP_INC" "$STEPS_FILE" "$INCLUDE_FILE"
 
 # ---------------------------------------------------------------------------- husky note
 if [ ! -d .husky ] || ! { [ -f package.json ] && grep -q '"husky"' package.json; }; then

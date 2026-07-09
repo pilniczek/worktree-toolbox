@@ -59,8 +59,8 @@ It also merges into these files without overwriting:
 1. **Package manager** — auto-detected from your lockfile; confirm or override.
 2. **Per-worktree setup commands** — zero or more commands (e.g. `npm run generate`).
    They run once when a worktree is created, and again on `/worktree-heal`.
-3. **`.worktreeinclude` entries** — gitignored files to copy into each new worktree
-   (env files, `.claude/settings.local.json`, …).
+3. **`.worktreeinclude` entries** — zero or more gitignored files to copy into each new
+   worktree (env files, `.claude/settings.local.json`, …), entered one path per line.
 
 ## How it's wired (big picture)
 
