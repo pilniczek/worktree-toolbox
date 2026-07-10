@@ -1,29 +1,11 @@
 ---
-description: Heal (re-provision) a worktree — force-re-runs the worktree setup
+description: Heal (re-provision) a worktree — force-re-runs the worktree setup. Use when a worktree is broken or stale - missing generated files, a half-finished setup, or drifted codegen.
 argument-hint: "full-branch-name (optional — omit to heal the current worktree)"
-allowed-tools: Bash(cd:*), Bash(sh:*), Bash(git worktree *), Bash(git check-ref-format:*)
+allowed-tools: Bash(sh scripts/worktree-heal.sh*)
 ---
 
-Heal a worktree by force-re-running its setup (`scripts/worktree-setup.sh --force`), which rebuilds everything: it
-relinks `node_modules` if missing and re-runs **every** configured provisioning step, ignoring the run-once marker. Use
-this when a worktree is broken or stale (missing generated files, a half-finished setup, deps that drifted). Do these in
-order; STOP and report if any step fails:
+Run `sh scripts/worktree-heal.sh $ARGUMENTS` and relay its output to me verbatim.
 
-1. **Locate the worktree.**
-   - If `$ARGUMENTS` is given, validate it (see **Validation**), derive the flat name (see **Flat name**), and confirm
-     `.claude/worktrees/<flat>` appears in `git worktree list`. If it does not, STOP and tell me — use `/worktree-create`
-     to create it first.
-   - If `$ARGUMENTS` is empty, heal the **current** worktree. Confirm this session is inside one
-     (`pwd` matches `*/.claude/worktrees/*`); if not, STOP and ask me which worktree to heal.
+The script locates the worktree (from `$ARGUMENTS` if given, otherwise the current one) and force-re-runs `scripts/worktree-setup.sh --force` inside it, rebuilding everything and ignoring the run-once marker. Individual provisioning-step failures are reported but do not abort the rest.
 
-2. **Move in (only if needed).** If you located a worktree by name and this session is not already inside it,
-   `EnterWorktree` with `path` `.claude/worktrees/<flat>` to relocate into it. If already inside the target, skip this.
-
-3. **Heal.** From inside the worktree, run `sh scripts/worktree-setup.sh --force`. This re-runs all provisioning steps
-   regardless of the run-once marker. Individual step failures are reported but do not abort the rest of the setup.
-
-4. **Report.** Summarize what was rebuilt (and any step that failed and needs a manual re-run) and the worktree path.
-
----
-
-{{WORKTREE_SHARED}}
+A **non-zero exit** means it stopped and printed why (not inside a worktree with no argument given, no such worktree, or setup failed). Relay that and stop. Do not run any git or setup yourself.

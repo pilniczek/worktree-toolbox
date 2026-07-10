@@ -1,13 +1,7 @@
 #!/usr/bin/env sh
-# worktree-toolbox installer — adds the worktree-per-issue Claude Code toolbox to a project.
-# Run from the ROOT of the target git repo:
-#
+# Adds the worktree-per-issue Claude Code toolbox to a project. Run from the ROOT of the target repo:
 #   curl -fsSL https://raw.githubusercontent.com/pilniczek/worktree-toolbox/main/worktree-per-issue/install.sh | sh
-#
-# Overridable via env:
-#   WORKTREE_TOOLBOX_REPO   owner/repo to fetch (default below)
-#   WORKTREE_TOOLBOX_REF    branch/tag/sha    (default: main)
-#   WORKTREE_TOOLBOX_SRC    local source dir with template/ and lib/ (skips the download)
+# Env overrides: see ../AGENTS.md (shared WORKTREE_TOOLBOX_*) and ./AGENTS.md (PM_INSTALL, PROVISION).
 set -eu
 
 REPO="${WORKTREE_TOOLBOX_REPO:-pilniczek/worktree-toolbox}"
@@ -18,7 +12,7 @@ say()  { printf '%s\n' "$*"; }
 warn() { printf 'WARN: %s\n' "$*" >&2; }
 die()  { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
-# ---------------------------------------------------------------------------- preflight
+# --- preflight -----------------------------------------------------------------------------
 command -v git  >/dev/null 2>&1 || die "git is required."
 command -v node >/dev/null 2>&1 || die "node is required (used to merge JSON config safely)."
 
@@ -26,7 +20,7 @@ TARGET="$(git rev-parse --show-toplevel 2>/dev/null)" || die "run this from insi
 cd "$TARGET"
 say "Target project: $TARGET"
 
-# ---------------------------------------------------------------------------- locate source
+# --- source --------------------------------------------------------------------------------
 # Prefer an explicit local source, then a checkout next to this script, else download a tarball.
 SRC=""
 if [ -n "${WORKTREE_TOOLBOX_SRC:-}" ]; then
@@ -53,7 +47,7 @@ if [ -z "$SRC" ]; then
 fi
 [ -d "$SRC/template" ] || die "toolbox source is missing template/ at $SRC."
 
-# ---------------------------------------------------------------------------- prompt plumbing
+# --- prompts -------------------------------------------------------------------------------
 # Detect a usable controlling terminal by actually opening /dev/tty — the device node can
 # exist yet fail to open (ENXIO) under pipes/CI, so a plain -r test is not enough. The open
 # is done in a SUBSHELL: in dash a failed redirection on a compound command is fatal to the
@@ -71,7 +65,7 @@ ask() { # ask "<prompt>" "<default>" -> echoes the answer
   printf '%s' "$_a"
 }
 
-# ---------------------------------------------------------------------------- package manager
+# --- package manager -----------------------------------------------------------------------
 PM_DEFAULT=npm
 if   [ -f pnpm-lock.yaml ]; then PM_DEFAULT=pnpm
 elif [ -f yarn.lock ];      then PM_DEFAULT=yarn
@@ -88,18 +82,17 @@ esac
 # Honored in both interactive and non-interactive runs — the only way to set it under curl | sh.
 PM_INSTALL="${WORKTREE_TOOLBOX_PM_INSTALL:-$PM_INSTALL}"
 
-# ---------------------------------------------------------------------------- provisioning steps
-STEPS_FILE="$(mktemp)"; SUMMARY_STEPS=""
-add_step() { # $1 = provisioning command — appends to STEPS_FILE and grows SUMMARY_STEPS
+# --- provisioning --------------------------------------------------------------------------
+STEPS_FILE="$(mktemp)"
+add_step() { # $1 = provisioning command — appends the guarded command to STEPS_FILE
   printf '( cd "$WT" && %s ) || echo "worktree: '\''%s'\'' failed; run it manually in the worktree." >&2\n' "$1" "$1" >> "$STEPS_FILE"
-  if [ -z "$SUMMARY_STEPS" ]; then SUMMARY_STEPS="\`$1\`"; else SUMMARY_STEPS="$SUMMARY_STEPS, \`$1\`"; fi
 }
 say ""
 say "Per-worktree provisioning commands (e.g. a codegen step). They run once when a worktree is"
 say "created, and again on '/worktree-heal' (worktree heal). Leave the command blank to finish."
 # Non-interactive escape hatch: one command per line in WORKTREE_TOOLBOX_PROVISION. Honored
 # regardless of TTY — the only way to configure provisioning steps under curl | sh. Fed via a
-# heredoc (not a pipe) so the loop runs in this shell and SUMMARY_STEPS survives.
+# heredoc (not a pipe) so the loop runs in this shell and the steps land in STEPS_FILE.
 if [ -n "${WORKTREE_TOOLBOX_PROVISION:-}" ]; then
   say "  Preloading provisioning steps from WORKTREE_TOOLBOX_PROVISION (any interactive entries are appended):"
   while IFS= read -r cmd; do
@@ -116,14 +109,7 @@ while [ "$INTERACTIVE" = 1 ]; do
 done
 [ -s "$STEPS_FILE" ] || printf '# (no provisioning steps configured)\n' > "$STEPS_FILE"
 
-WT_SUMMARY="it hardlink-copies the main checkout's \`node_modules\`"
-if [ -n "$SUMMARY_STEPS" ]; then
-  WT_SUMMARY="$WT_SUMMARY and runs your configured provisioning steps ($SUMMARY_STEPS)."
-else
-  WT_SUMMARY="$WT_SUMMARY."
-fi
-
-# ---------------------------------------------------------------------------- worktreeinclude
+# --- worktreeinclude -----------------------------------------------------------------------
 INCLUDE_FILE="$(mktemp)"
 say ""
 say "Gitignored files to copy into each new worktree (e.g. .env, local settings)."
@@ -141,7 +127,7 @@ else
   printf '%s\n' ".claude/settings.local.json" >> "$INCLUDE_FILE"
 fi
 
-# ---------------------------------------------------------------------------- write files
+# --- write files ---------------------------------------------------------------------------
 say ""
 say "Installing files:"
 mkdir -p .claude/commands .husky scripts docs
@@ -156,59 +142,43 @@ install_file() { # $1 = source, $2 = dest  (overwrites a differing existing file
   cp "$1" "$2"
 }
 
-# static copies
-install_file "$SRC/template/.husky/post-checkout"     ".husky/post-checkout"
+# Static copies (no install-time templating): the hook, the three command wrappers, the scripts.
+install_file "$SRC/template/.husky/post-checkout"          ".husky/post-checkout"
+for cmd in worktree-create worktree-heal worktree-remove; do
+  install_file "$SRC/template/.claude/commands/$cmd.md"    ".claude/commands/$cmd.md"
+done
+for s in worktree-common worktree-create worktree-heal worktree-remove; do
+  install_file "$SRC/template/scripts/$s.sh"               "scripts/$s.sh"
+done
 
 GEN="$(mktemp)"
 
-# templated: the three slash commands each inline the shared block in place of their {{WORKTREE_SHARED}}
-# placeholder. The shared block (shared/worktree-shared.md) is a build input — it is NOT copied into the
-# target; its {{WORKTREE_SETUP_SUMMARY}} is substituted first, then the whole block is spliced in, so the
-# installed commands are self-contained.
-for cmd in worktree-create worktree-heal worktree-remove; do
-  WT_SUMMARY="$WT_SUMMARY" node -e '
+# tmpl SRC DST — copy SRC to DST substituting the install-time template tokens: {{PM_INSTALL}}
+# everywhere, and {{PROVISION_STEPS}} where present (absent in docs/worktrees.md — a no-op there).
+tmpl() {
+  PM_INSTALL="$PM_INSTALL" STEPS_FILE="$STEPS_FILE" node -e '
     const fs=require("fs");
-    let shared=fs.readFileSync(process.argv[1],"utf8");
-    shared=shared.split("{{WORKTREE_SETUP_SUMMARY}}").join(process.env.WT_SUMMARY);
-    // drop the build-input HTML comment header so it does not leak into the installed command
-    shared=shared.replace(/^<!--[\s\S]*?-->\n*/, "");
-    let cmd=fs.readFileSync(process.argv[2],"utf8");
-    cmd=cmd.split("{{WORKTREE_SHARED}}").join(shared.trimEnd());
-    fs.writeFileSync(process.argv[3],cmd);
-  ' "$SRC/shared/worktree-shared.md" "$SRC/template/.claude/commands/$cmd.md" "$GEN"
-  install_file "$GEN" ".claude/commands/$cmd.md"
-done
+    let s=fs.readFileSync(process.argv[1],"utf8");
+    s=s.split("{{PM_INSTALL}}").join(process.env.PM_INSTALL);
+    s=s.split("{{PROVISION_STEPS}}").join(fs.readFileSync(process.env.STEPS_FILE,"utf8").trimEnd());
+    fs.writeFileSync(process.argv[2],s);
+  ' "$1" "$2"
+}
 
-# templated: worktree-setup.sh
-PM_INSTALL="$PM_INSTALL" STEPS_FILE="$STEPS_FILE" node -e '
-  const fs=require("fs");
-  let s=fs.readFileSync(process.argv[1],"utf8");
-  s=s.split("{{PM_INSTALL}}").join(process.env.PM_INSTALL);
-  s=s.split("{{PROVISION_STEPS}}").join(fs.readFileSync(process.env.STEPS_FILE,"utf8").trimEnd());
-  fs.writeFileSync(process.argv[2],s);
-' "$SRC/template/scripts/worktree-setup.sh" "$GEN"
-install_file "$GEN" "scripts/worktree-setup.sh"
-
-# templated: docs/worktrees.md
-PM_INSTALL="$PM_INSTALL" node -e '
-  const fs=require("fs");
-  let s=fs.readFileSync(process.argv[1],"utf8");
-  s=s.split("{{PM_INSTALL}}").join(process.env.PM_INSTALL);
-  fs.writeFileSync(process.argv[2],s);
-' "$SRC/template/docs/worktrees.md" "$GEN"
-install_file "$GEN" "docs/worktrees.md"
+tmpl "$SRC/template/scripts/worktree-setup.sh" "$GEN"; install_file "$GEN" "scripts/worktree-setup.sh"
+tmpl "$SRC/template/docs/worktrees.md"          "$GEN"; install_file "$GEN" "docs/worktrees.md"
 rm -f "$GEN"
 
-chmod +x .husky/post-checkout scripts/worktree-setup.sh 2>/dev/null || true
+chmod +x .husky/post-checkout scripts/worktree-*.sh 2>/dev/null || true
 
-# ---------------------------------------------------------------------------- merge config
+# --- merge config --------------------------------------------------------------------------
 say ""
 say "Merging config (additive — existing values are preserved):"
 MERGE="$SRC/lib/merge.cjs"
 node "$MERGE" settings ".claude/settings.json" | sed 's/^/  settings: /' || warn "settings.json merge reported an issue (see above)."
 node "$MERGE" vscode   ".vscode/settings.json" '4'                                               | sed 's/^/  vscode:   /' || warn "vscode settings merge reported an issue (see above)."
 
-# ---------------------------------------------------------------------------- gitignore + worktreeinclude
+# --- gitignore -----------------------------------------------------------------------------
 if [ -f .gitignore ] && grep -qxF '.claude/worktrees/' .gitignore; then
   say "  gitignore: .claude/worktrees/ already ignored"
 else
@@ -226,7 +196,7 @@ TMP_INC="$(mktemp)"
 install_file "$TMP_INC" ".worktreeinclude"
 rm -f "$TMP_INC" "$STEPS_FILE" "$INCLUDE_FILE"
 
-# ---------------------------------------------------------------------------- husky note
+# --- husky ---------------------------------------------------------------------------------
 if [ ! -d .husky ] || ! { [ -f package.json ] && grep -q '"husky"' package.json; }; then
   say ""
   warn "husky was not detected. The .husky/post-checkout hook (a convenience that provisions a"
@@ -236,7 +206,7 @@ if [ ! -d .husky ] || ! { [ -f package.json ] && grep -q '"husky"' package.json;
   warn "works with or without husky."
 fi
 
-# ---------------------------------------------------------------------------- summary
+# --- summary -------------------------------------------------------------------------------
 say ""
 say "Done. worktree-toolbox installed."
 say ""

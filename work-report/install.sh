@@ -1,13 +1,7 @@
 #!/usr/bin/env sh
-# work-report installer — adds the /work-report Claude Code command to a project.
-# Run from inside the target git repo:
-#
+# Adds the /work-report Claude Code command to a project. Run from inside the target git repo:
 #   curl -fsSL https://raw.githubusercontent.com/pilniczek/worktree-toolbox/main/work-report/install.sh | sh
-#
-# Overridable via env:
-#   WORKTREE_TOOLBOX_REPO   owner/repo to fetch (default below)
-#   WORKTREE_TOOLBOX_REF    branch/tag/sha    (default: main)
-#   WORKTREE_TOOLBOX_SRC    local source dir with template/ (skips the download)
+# Env overrides (shared WORKTREE_TOOLBOX_*): see ../AGENTS.md.
 set -eu
 
 REPO="${WORKTREE_TOOLBOX_REPO:-pilniczek/worktree-toolbox}"
@@ -18,13 +12,13 @@ CMD="template/.claude/commands/work-report.md"
 say() { printf '%s\n' "$*"; }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
-# ---------------------------------------------------------------------------- preflight
+# --- preflight -----------------------------------------------------------------------------
 command -v git >/dev/null 2>&1 || die "git is required."
 TARGET="$(git rev-parse --show-toplevel 2>/dev/null)" || die "run this from inside a git repository."
 cd "$TARGET"
 say "Target project: $TARGET"
 
-# ---------------------------------------------------------------------------- locate source
+# --- source --------------------------------------------------------------------------------
 # Prefer an explicit local source, then a checkout next to this script, else download a tarball.
 SRC=""
 if [ -n "${WORKTREE_TOOLBOX_SRC:-}" ]; then
@@ -49,7 +43,7 @@ if [ -z "$SRC" ]; then
 fi
 [ -f "$SRC/$CMD" ] || die "command not found at $SRC/$CMD."
 
-# ---------------------------------------------------------------------------- install
+# --- install -------------------------------------------------------------------------------
 say ""
 say "Installing files:"
 mkdir -p .claude/commands
@@ -61,7 +55,7 @@ else
   cp "$SRC/$CMD" "$DEST"; say "  + $DEST"
 fi
 
-# ---------------------------------------------------------------------------- gitignore
+# --- gitignore -----------------------------------------------------------------------------
 # WORK-REPORT.md lives at the working tree's root. Anchor the rule with a leading slash so it
 # ignores only the root report — a bare 'WORK-REPORT.md' matches by basename at any depth and,
 # on a case-insensitive FS (core.ignorecase=true, the Windows/macOS default), also matches the

@@ -1,13 +1,13 @@
 # vscode-claude-tabs
 
-Open [Claude Code](https://claude.com/claude-code) as **editor-area terminal tabs** in VS Code — one
-per git worktree — with a single keypress (`Ctrl+Alt+W`). Your normal `` Ctrl+` `` terminals stay in
+Open [Claude Code](https://claude.com/claude-code) as **editor-area terminal tabs** in VS Code - one
+per git worktree - with a single keypress (`Ctrl+Alt+W`). Your normal `` Ctrl+` `` terminals stay in
 the bottom panel.
 
 > Part of [worktree-toolbox](../README.md). Installs USER-GLOBAL (`~/.claude/scripts` + your VS Code
 > `keybindings.json`), not into a project.
 
-If you run one worktree per issue (e.g. via Claude Code's `/worktree-create`), this gives you a `claude` session per
+If you run one worktree per issue (e.g. via Claude Code's native worktree support), this gives you a `claude` session per
 worktree as real editor tabs you can arrange side by side or drag out into a floating window — instead
 of a pile of native OS terminal windows.
 
@@ -18,13 +18,13 @@ Editor-area terminals can only be created by VS Code itself, and the mechanics b
 - The `terminals` extension can't place a terminal in the editor area ([vscode#127515](https://github.com/microsoft/vscode/issues/127515)).
 - The `code` CLI can't trigger a workbench command from a script.
 - A `folderOpen` **task** *can* auto-open on startup, but task terminals only land in the editor area
-  via the **global** `terminal.integrated.defaultLocation: "editor"` — which also sends every normal
+  via the **global** `terminal.integrated.defaultLocation: "editor"` - which also sends every normal
   terminal to the editor area. Per-task location was requested and closed as *not planned*
   ([vscode#212070](https://github.com/microsoft/vscode/issues/212070)).
 
 The one mechanism that opens a terminal in the editor area **without** the global flag is a **keybinding**
-running `runCommands` → `workbench.action.createTerminalEditor` (+ `sendSequence` to run the command).
-That's what this generates. The trade-off: it's on-demand (a keypress), not automatic on window open.
+running `runCommands` → `workbench.action.createTerminalEditor` (+ `sendSequence`). That's what this
+generates - the trade-off being it's on-demand (a keypress), not automatic on window open.
 
 ## How it works
 
@@ -44,8 +44,8 @@ Code `keybindings.json`:
 }
 ```
 
-It's **idempotent and self-migrating**: it replaces the binding it manages (detected by signature, so
-changing the key removes the old one) and leaves all your other keybindings untouched.
+It's **idempotent and self-migrating**: it replaces the binding it manages (detected by signature,
+so changing the key removes the old one) and leaves your other keybindings untouched.
 
 ## Requirements
 
@@ -61,6 +61,8 @@ Run from inside any git repo (worktree paths are read at generation time):
 ```sh
 curl -fsSL https://raw.githubusercontent.com/pilniczek/worktree-toolbox/main/vscode-claude-tabs/install.sh | sh
 ```
+
+On native Windows, run this in **Git Bash** (not CMD/PowerShell). See the [toolbox README](../README.md#install).
 
 Or from a clone:
 
@@ -109,6 +111,7 @@ Set env vars when running the generator or `install.sh`:
 | `CLAUDE_WT_KEY` | `ctrl+alt+w` | Keybinding chord |
 | `CLAUDE_WT_COMMAND` | `claude` | Command run in each tab |
 | `VSCODE_KEYBINDINGS_PATH` | auto-detected | Full path to `keybindings.json` |
+| `INSTALL_DIR` | `~/.claude/scripts` | Where `install.sh` copies the generator |
 
 ## Caveats
 

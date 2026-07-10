@@ -1,33 +1,10 @@
 #!/usr/bin/env node
 /**
- * Generate a personal VS Code keybinding (default: ctrl+alt+w) that opens `claude` as an
- * EDITOR-AREA terminal tab for the primary checkout AND every linked git worktree — one tab each.
- *
- * Why a keybinding (not startup automation): editor-area terminals can only be created by VS Code
- * itself. The only way to auto-open one on startup is a `folderOpen` task, but task terminals only
- * land in the editor area via the GLOBAL `terminal.integrated.defaultLocation: "editor"`, which would
- * also drag every normal Ctrl+` terminal into the editor area. To keep normal terminals in the panel,
- * we open claude tabs on demand via `runCommands` -> `createTerminalEditor` (+ `sendSequence`), the
- * only mechanism that sets editor location per-terminal without the global flag.
- *
- * The binding is regenerated from `git worktree list`, so run this whenever worktrees change.
- * Idempotent and self-migrating: it replaces its own managed binding (detected by signature, so
- * changing the key cleans up the old one) and preserves every other keybinding you have.
- *
- * Config via env vars:
- *   CLAUDE_WT_KEY            keybinding chord            (default: ctrl+alt+w)
- *   CLAUDE_WT_COMMAND        command to run per tab      (default: claude)
- *   VSCODE_KEYBINDINGS_PATH  full path to keybindings.json (default: auto-detected per platform)
- *
- * Platform note: under WSL, VS Code keybindings live on the Windows host (application-scoped, shared
- * by the remote window), so we target /mnt/c/Users/<user>/AppData/Roaming/Code/User/keybindings.json.
- * Native Linux/macOS/Windows paths are detected too.
- *
- * Caveats:
- *  - On a very slow machine the sequence may be typed before the new terminal finishes init; shells
- *    buffer input, so this is almost always fine.
- *  - keybindings.json is application-scoped, so the absolute worktree paths of THIS repo also live in
- *    other VS Code windows (harmless — pressing the chord elsewhere just cd's into these paths).
+ * Generate a VS Code keybinding that opens `claude` as an editor-area terminal tab for the primary
+ * checkout and every linked git worktree — one tab each. Regenerated from `git worktree list`, so
+ * run it whenever worktrees change. Idempotent and self-migrating (replaces only the binding it
+ * manages, detected by signature). Config via env: CLAUDE_WT_KEY, CLAUDE_WT_COMMAND,
+ * VSCODE_KEYBINDINGS_PATH. See README.md for the rationale (why a keybinding, WSL, caveats).
  */
 'use strict';
 
@@ -55,7 +32,7 @@ function isWSL() {
   }
 }
 
-// --- Resolve the VS Code keybindings.json path for this platform.
+// --- keybindings path ---------------------------------------------------------------------
 function resolveKeybindingsPath() {
   if (process.env.VSCODE_KEYBINDINGS_PATH) return process.env.VSCODE_KEYBINDINGS_PATH;
   if (isWSL()) {
@@ -78,7 +55,7 @@ function resolveKeybindingsPath() {
   }
 }
 
-// --- Enumerate worktrees: primary checkout first, then each LIVE linked worktree.
+// --- enumerate worktrees ------------------------------------------------------------------
 // Skip `prunable`/missing worktrees — a dead path makes `cd` fail so `claude` never runs.
 function listWorktrees() {
   const out = sh('git', ['worktree', 'list', '--porcelain']);
@@ -97,7 +74,7 @@ function listWorktrees() {
   return worktrees;
 }
 
-// --- Build the runCommands binding: per worktree, open an editor terminal and run the command in it.
+// --- build binding ------------------------------------------------------------------------
 function buildBinding(worktrees) {
   const commands = [];
   for (const wt of worktrees) {
@@ -110,14 +87,14 @@ function buildBinding(worktrees) {
   return { key: KEY, command: 'runCommands', args: { commands } };
 }
 
-// --- Recognise a binding this tool generated (any key), so key changes migrate cleanly.
+// --- recognise managed --------------------------------------------------------------------
 function isManaged(b) {
   if (!b || b.command !== 'runCommands') return false;
   const cmds = Array.isArray(b.args?.commands) ? b.args.commands : [];
   return cmds.includes('workbench.action.createTerminalEditor');
 }
 
-// --- Tolerantly parse JSONC (strip // and /* */ comments) into the bindings array.
+// --- parse jsonc --------------------------------------------------------------------------
 function parseBindings(text) {
   if (!text.trim()) return [];
   const stripped = text

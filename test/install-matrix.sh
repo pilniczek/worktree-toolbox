@@ -1,22 +1,10 @@
 #!/usr/bin/env sh
-# Install-combination smoke test for worktree-toolbox.
-#
-# The three tools (worktree-per-issue=W, work-report=R, vscode-claude-tabs=V) are advertised as
-# independently installable — "use any alone or together." This test installs each of the 7
-# non-empty combinations into a throwaway git repo and asserts they do not collide: expected
-# artifacts land, no installer clobbers another's file (a `~ (replaced)` line in the installer
-# log would prove it did), the shared
-# .gitignore gets each entry exactly once, V stays user-global, and re-runs are idempotent.
-#
-# Fully OFFLINE — installs from the local checkout via each installer's WORKTREE_TOOLBOX_SRC
-# override, so nothing is downloaded. Fully SANDBOXED — HOME, the vscode-claude-tabs INSTALL_DIR,
-# and the VS Code keybindings path are all redirected to temp dirs, so your real ~/.claude and
-# VS Code config are never touched.
-#
+# Install-combination smoke test for worktree-toolbox (W=worktree-per-issue, R=work-report,
+# V=vscode-claude-tabs). Offline and sandboxed; see "How to test" in ../AGENTS.md for the contract.
 # Requires: git, node, sh.  Run from anywhere:  sh test/install-matrix.sh
 set -u
 
-# ---------------------------------------------------------------------------- locate the repo
+# --- locate repo ---------------------------------------------------------------------------
 # This script lives in <repo>/test/.
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 REPO="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
@@ -27,7 +15,7 @@ V_SRC="$REPO/vscode-claude-tabs"
 command -v git  >/dev/null 2>&1 || { echo "git is required."  >&2; exit 1; }
 command -v node >/dev/null 2>&1 || { echo "node is required." >&2; exit 1; }
 
-# ---------------------------------------------------------------------------- non-interactive runner
+# --- runner --------------------------------------------------------------------------------
 # worktree-per-issue's installer prompts when it can open /dev/tty; on a developer terminal that
 # would hang the test. Detach from the controlling terminal so /dev/tty can't be opened and the
 # installer falls back to its defaults. `setsid -w` waits and forwards the child's exit status;
@@ -53,7 +41,7 @@ install_W() { WORKTREE_TOOLBOX_SRC="$W_SRC" run_installer "$W_SRC/install.sh"; }
 install_R() { WORKTREE_TOOLBOX_SRC="$R_SRC" run_installer "$R_SRC/install.sh"; }
 install_V() { WORKTREE_TOOLBOX_SRC="$V_SRC" run_installer "$V_SRC/install.sh"; }
 
-# ---------------------------------------------------------------------------- assertions
+# --- assertions ----------------------------------------------------------------------------
 FAILED=0        # any combo failed (process exit code)
 COMBO_FAIL=0    # current combo failed
 fail() { echo "    x $1"; COMBO_FAIL=1; FAILED=1; }
@@ -71,22 +59,24 @@ assert_no_clobber() {  # a "~ (replaced)" line proves an installer overwrote a d
 assert_W() {  # worktree-per-issue artifacts (installed into the target project)
   for f in worktree-create worktree-heal worktree-remove; do
     assert_file "$TARGET/.claude/commands/$f.md"
-    # the shared block is inlined at install — each command must be self-contained…
-    assert_grep '**Flat name.**'           "$TARGET/.claude/commands/$f.md"
-    assert_grep 'Code vs context isolation' "$TARGET/.claude/commands/$f.md"
-    # …with no unsubstituted marker and no runtime cat-injection left behind
+    # each command is a thin wrapper that invokes its script and relays the output
+    assert_grep "sh scripts/$f.sh" "$TARGET/.claude/commands/$f.md"
+    # the logic lives in scripts, not the prompt — the old inlined shared block must be gone
     grep -qF '{{WORKTREE_SHARED}}' "$TARGET/.claude/commands/$f.md" && fail "unsubstituted {{WORKTREE_SHARED}} in $f.md"
-    grep -qF '!`cat'               "$TARGET/.claude/commands/$f.md" && fail "leftover !\`cat injection in $f.md"
+    grep -qF '**Flat name.**'      "$TARGET/.claude/commands/$f.md" && fail "shared block leaked into $f.md (should be script-only)"
+    # the matching script must ship, and its permission entry must be granted (one per command)
+    assert_file "$TARGET/scripts/$f.sh"
+    assert_grep "Bash(sh scripts/$f.sh*)" "$TARGET/.claude/settings.json"
   done
-  # the shared block is a toolbox-side build input — it must NOT be shipped into the target
+  assert_file "$TARGET/scripts/worktree-common.sh"      # shared rules sourced by the three scripts
+  # the shared markdown is a deleted build input — it must NOT be shipped into the target
   assert_absent "$TARGET/.claude/worktree-shared.md" "worktree-shared.md should not be installed"
   assert_file "$TARGET/.husky/post-checkout"
   assert_file "$TARGET/scripts/worktree-setup.sh"
   assert_file "$TARGET/docs/worktrees.md"
   assert_file "$TARGET/.worktreeinclude"
-  assert_grep 'Bash(git worktree *)' "$TARGET/.claude/settings.json"
-  assert_grep 'Bash(git -C:*)'       "$TARGET/.claude/settings.json"
-  assert_grep 'git.detectWorktrees'  "$TARGET/.vscode/settings.json"
+  assert_grep 'Bash(git worktree *)'  "$TARGET/.claude/settings.json"   # kept for manual use
+  assert_grep 'git.detectWorktrees'   "$TARGET/.vscode/settings.json"
   [ "$(count_lines '.claude/worktrees/' "$TARGET/.gitignore")" = 1 ] \
     || fail ".claude/worktrees/ not exactly once in .gitignore"
 }
@@ -101,7 +91,7 @@ assert_V() {  # vscode-claude-tabs artifacts (user-global, sandboxed)
   assert_grep 'runCommands' "$SANDBOX_KEYBINDINGS"
 }
 
-# ---------------------------------------------------------------------------- combo runner
+# --- combos --------------------------------------------------------------------------------
 TMP_DIRS=""
 cleanup() { for d in $TMP_DIRS; do rm -rf "$d"; done; }
 trap cleanup EXIT INT TERM
@@ -179,7 +169,7 @@ run_combo() {  # $1 = human label, $2 = install-order string of letters (e.g. "W
   report_combo "$label"
 }
 
-# ---------------------------------------------------------------------------- env-override test
+# --- env override --------------------------------------------------------------------------
 # The non-interactive escape hatches are the ONLY way to configure a `curl | sh` install (no TTY),
 # so they need explicit coverage. Install W with both set and assert the overrides reached the
 # templated output — this guards the two things that had to be hand-corrected downstream.
@@ -202,7 +192,7 @@ run_env_override_test() {
   report_combo "$label"
 }
 
-# ---------------------------------------------------------------------------- run the matrix
+# --- run -----------------------------------------------------------------------------------
 echo "worktree-toolbox install-combination smoke test"
 echo "  W=worktree-per-issue  R=work-report  V=vscode-claude-tabs"
 [ "$HAVE_SETSID" = 1 ] || echo "  note: setsid not found — relying on the absence of a controlling terminal."

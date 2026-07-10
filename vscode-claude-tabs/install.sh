@@ -1,18 +1,9 @@
 #!/usr/bin/env sh
-# vscode-claude-tabs installer — installs the keybinding generator that opens a `claude`
-# editor tab per git worktree, and generates the binding now. Installs USER-GLOBAL
-# (~/.claude/scripts + your VS Code keybindings.json), not into a project.
-#
+# Installs the keybinding generator that opens a `claude` editor tab per git worktree, then generates
+# the binding now. USER-GLOBAL (~/.claude/scripts + your VS Code keybindings.json), not into a project.
 #   curl -fsSL https://raw.githubusercontent.com/pilniczek/worktree-toolbox/main/vscode-claude-tabs/install.sh | sh
-#
-# Overridable via env:
-#   INSTALL_DIR               where to install the generator (default: ~/.claude/scripts)
-#   CLAUDE_WT_KEY             keybinding chord for the generator      (default: ctrl+alt+w)
-#   CLAUDE_WT_COMMAND         command run in each tab                 (default: claude)
-#   VSCODE_KEYBINDINGS_PATH   full path to keybindings.json           (default: auto-detected)
-#   WORKTREE_TOOLBOX_REPO     owner/repo to fetch                     (default: pilniczek/worktree-toolbox)
-#   WORKTREE_TOOLBOX_REF      branch/tag/sha                          (default: main)
-#   WORKTREE_TOOLBOX_SRC      local source dir containing the generator (skips the download)
+# Env overrides: see README.md (INSTALL_DIR, CLAUDE_WT_*, VSCODE_KEYBINDINGS_PATH) and
+# ../AGENTS.md (shared WORKTREE_TOOLBOX_*).
 set -eu
 
 REPO="${WORKTREE_TOOLBOX_REPO:-pilniczek/worktree-toolbox}"
@@ -25,7 +16,7 @@ die()  { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
 command -v node >/dev/null 2>&1 || die "node is required but was not found on PATH."
 
-# ---------------------------------------------------------------------------- locate source
+# --- source --------------------------------------------------------------------------------
 # Prefer an explicit local source, then a checkout next to this script, else download a tarball.
 SRC=""
 if [ -n "${WORKTREE_TOOLBOX_SRC:-}" ]; then
@@ -52,14 +43,14 @@ if [ -z "$SRC" ]; then
 fi
 [ -f "$SRC/$SCRIPT" ] || die "generator not found at $SRC/$SCRIPT."
 
-# ---------------------------------------------------------------------------- install
+# --- install -------------------------------------------------------------------------------
 DEST="${INSTALL_DIR:-$HOME/.claude/scripts}"
 mkdir -p "$DEST"
 cp "$SRC/$SCRIPT" "$DEST/$SCRIPT"
 chmod +x "$DEST/$SCRIPT"
 say "✔ Installed $DEST/$SCRIPT"
 
-# ---------------------------------------------------------------------------- generate now
+# --- generate ------------------------------------------------------------------------------
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   node "$DEST/$SCRIPT"
 else

@@ -34,6 +34,10 @@ curl -fsSL https://raw.githubusercontent.com/pilniczek/worktree-toolbox/main/wor
 curl -fsSL https://raw.githubusercontent.com/pilniczek/worktree-toolbox/main/vscode-claude-tabs/install.sh | sh
 ```
 
+**On Windows:** run these in **Git Bash** (not CMD or PowerShell) - it ships with
+[Git for Windows](https://git-scm.com/download/win) and provides `sh`, `curl`, and `tar`.
+In **WSL**, use your normal Linux terminal - the one-liners work as-is.
+
 See each tool's README for what it prompts for, requirements, and customization.
 
 ## Using them together
@@ -41,10 +45,9 @@ See each tool's README for what it prompts for, requirements, and customization.
 The tools stand alone, but one integration is worth wiring up.
 
 **Refresh the `vscode-claude-tabs` binding whenever `worktree-per-issue` creates a worktree.**
-`worktree-per-issue`'s `/worktree-create` uses plain `git worktree add` (then enters by path), so
-Claude Code's native `open-worktree-terminal.sh` hook never fires. Instead, append this guarded block
-after the provisioning steps in that tool's `scripts/worktree-setup.sh` (it runs on every worktree
-create — via `post-checkout` and the `/worktree-create` provision step):
+Because `/worktree-create` uses plain `git worktree add`, Claude Code's native
+`open-worktree-terminal.sh` hook never fires. Instead, append this guarded block after the
+provisioning steps in that tool's `scripts/worktree-setup.sh` (it runs on every worktree create):
 
 ```sh
 if [ -f "$HOME/.claude/scripts/gen-claude-tabs-keybinding.js" ]; then
@@ -52,13 +55,14 @@ if [ -f "$HOME/.claude/scripts/gen-claude-tabs-keybinding.js" ]; then
 fi
 ```
 
-It's a no-op when `vscode-claude-tabs` isn't installed, and `|| true` keeps it from ever failing setup
-(which runs under `set -e`). The generator re-reads the full `git worktree list`, so one refresh reflects
-every worktree. Then press `Ctrl+Alt+W` — no window reload needed (VS Code hot-applies `keybindings.json`).
+It's a no-op when `vscode-claude-tabs` isn't installed, and `|| true` keeps it from failing setup
+(which runs under `set -e`). The generator re-reads the full `git worktree list`, so one refresh
+reflects every worktree. Then press `Ctrl+Alt+W` - no window reload needed (VS Code hot-applies
+`keybindings.json`).
 
 ## Requirements
 
-- `git` for all three; `worktree-per-issue` and `vscode-claude-tabs` also need `node`; `curl` + `tar` for the hosted one-liners.
+- `git` for all three; `worktree-per-issue` and `vscode-claude-tabs` also need `node`; `curl` + `tar` for the hosted one-liners (on native Windows, Git Bash supplies both - no separate install needed).
 - `vscode-claude-tabs` additionally needs VS Code with `claude` on your PATH.
 
 ## Repository layout
@@ -82,12 +86,11 @@ Both installers accept `WORKTREE_TOOLBOX_REPO`, `WORKTREE_TOOLBOX_REF`, and `WOR
 
 ## Testing
 
-`test/install-matrix.sh` is a smoke test that guards the "install any combination" promise: it
-installs each of the 7 non-empty tool combinations into throwaway git repos and asserts they do
-not collide (expected files land, no installer clobbers another's, `.gitignore` gets each entry
-once, `vscode-claude-tabs` stays user-global, re-runs are idempotent). It runs fully offline
-(installs from this checkout via `WORKTREE_TOOLBOX_SRC`) and fully sandboxed (never touches your
-real `~/.claude` or VS Code config). Needs `git` + `node`:
+`test/install-matrix.sh` is a smoke test guarding the "install any combination" promise: it
+installs each of the 7 non-empty tool combinations into throwaway git repos and asserts they don't
+collide (expected files land, no installer clobbers another's, `.gitignore` gets each entry once,
+`vscode-claude-tabs` stays user-global, re-runs are idempotent). It runs fully offline and
+sandboxed (never touches your real `~/.claude` or VS Code config). Needs `git` + `node`:
 
 ```sh
 sh test/install-matrix.sh

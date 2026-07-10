@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "docs-consistency-check": {
+      "source": "pilniczek/docs-consistency-check",
+      "sourceType": "github",
+      "skillPath": "skills/docs-consistency-check/SKILL.md",
+      "computedHash": "566799553648574329f092782d8c0f7cfe0dcc4b22b28275aa9c58a369655320"
+    },
     "domain-modeling": {
       "source": "mattpocock/skills",
       "sourceType": "github",

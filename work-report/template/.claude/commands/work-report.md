@@ -1,5 +1,5 @@
 ---
-description: Write/update the work report for this repo — a standardized summary of the work done
+description: Write/update the work report for this repo — a standardized summary of the work done. Use when checkpointing or handing off work, so a reviewer or a later session can read intent instead of re-deriving it from the diff.
 argument-hint: "(optional) a note to emphasize in the report; omit to summarize all the work here"
 allowed-tools: Bash(git rev-parse:*), Bash(git branch:*), Bash(printenv:*), Bash(ls:*), Bash(grep:*), Read, Write
 ---

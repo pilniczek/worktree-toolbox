@@ -1,12 +1,7 @@
 #!/usr/bin/env node
 /**
  * Additive JSON merge helper for the worktree-toolbox installer. Never clobbers existing values:
- * it only adds keys/array entries that are absent. Each mode reads a JSON file (or treats a
- * missing file as {}), applies its additions, and writes it back with 2-space indentation.
- *
- * Usage:
- *   node merge.cjs settings <path>              # .claude/settings.json
- *   node merge.cjs vscode   <path> <scanDepth>  # .vscode/settings.json
+ * it only adds keys/array entries that are absent, and writes back with 2-space indentation.
  *
  * Exit codes: 0 = merged (prints notes to stdout). 2 = file exists but is not parseable JSON
  * (prints a warning + the snippet to add by hand; the installer treats this as non-fatal).
@@ -54,8 +49,9 @@ function bailUnparseable(snippet) {
 }
 
 if (mode === 'settings') {
-  // Bash(git -C:*) covers /worktree-remove running `git -C "<main>" worktree remove …` from inside a worktree.
-  const allow = ['Bash(git worktree *)', 'Bash(git -C:*)'];
+  // The three slash commands run `sh scripts/worktree-<name>.sh` (all the git work happens inside that
+  // one sh process, so only the sh call needs allowing). Bash(git worktree *) stays for manual use.
+  const allow = ['Bash(sh scripts/worktree-create.sh*)', 'Bash(sh scripts/worktree-heal.sh*)', 'Bash(sh scripts/worktree-remove.sh*)', 'Bash(git worktree *)'];
   if (obj === null) {
     bailUnparseable(allow.map((p) => `  permissions.allow += "${p}"`).join('\n'));
   }

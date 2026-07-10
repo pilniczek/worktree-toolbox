@@ -1,27 +1,14 @@
 # `/worktree-remove` — close a worktree
 
-> Part of [worktree-per-issue](../README.md). Removes a worktree and, if safe,
-> deletes its branch.
+> Part of [worktree-per-issue](../README.md). Removes a worktree and, if the branch is
+> safely merged, deletes it too.
 
-Removal always runs against the **main checkout** via `git -C`, so it never needs to
-step the session out first — it works whether you're in main, in a worktree the
-`/worktree-create` flow moved you into, or a separate Claude session launched
-**directly inside** the worktree (which has no `EnterWorktree` session to exit).
-Claude's native `ExitWorktree` is not used. Closing is explicit.
-
-`/worktree-remove` has two modes, chosen by where you run it:
-
-- **inside a worktree** — run `/worktree-remove` (no argument) to close _that_ one.
-  Removal deletes the folder you're standing in, so if this session was started inside
-  that worktree its directory no longer exists afterwards — close it and continue from
-  the main checkout.
-- **from the main checkout** — run `/worktree-remove <branch>` to close a named one.
-
-The wrong combination (an argument inside a worktree, or none from main) stops with a
-hint. It runs `git worktree remove` (refuses if the worktree is dirty), then
-`git branch -d`, which deletes the branch **only if it's merged into your trunk**. An
-unmerged branch is kept and reported, so no commits are ever lost. It never
-force-removes, never uses `git branch -D`, and never touches the remote.
+The command is a thin wrapper: it runs `scripts/worktree-remove.sh` (installed from
+`template/scripts/worktree-remove.sh`) and relays its output. The script re-execs the main
+checkout's copy of itself before removing anything, so the running script never sits inside
+the directory being deleted (matters on Windows, where an open file blocks its own removal).
+Removal always runs against the main checkout via `git -C`, so it works from anywhere and
+never needs `ExitWorktree`.
 
 ## From inside the worktree — `/worktree-remove`
 
@@ -75,30 +62,5 @@ flowchart TD
   class rest ref;
 ```
 
-## Automatic prune (safe)
-
-`/worktree-create` (and the setup script when run from main) runs `git worktree
-prune`, which only removes records for folders that are **already gone** — never a
-live worktree or a branch. So a folder you delete by hand clears its stale `git
-worktree list` entry next time. You can also run it yourself.
-
-## Manual fallback
-
-The same steps by hand:
-
-```sh
-git worktree list                                 # review worktrees + their branches
-git worktree remove .claude/worktrees/<flat>      # drop a finished worktree's dir (refuses if dirty)
-git branch --merged main                          # branches fully merged into trunk — safe to delete
-git branch -d feature/<initials>/<ISSUE>/<slug>   # -d refuses to delete anything unmerged
-```
-
-Use `git worktree remove --force` only when the uncommitted changes can be thrown
-away, and `git branch -D` only for an unmerged branch you know you don't need.
-
-## Shared branches
-
-A worktree checked out from an existing branch is often on a colleague's branch. `git
-branch -d` (and `/worktree-remove`) only delete your **local** copy and never touch
-the remote. Still, never force-push or `git branch -D` someone else's branch without
-asking first.
+Full flow (both modes), the never-`--force`/never-`-D` safety rules, the
+manual fallback, and the shared-branch caution: [Cleanup](../template/docs/worktrees.md#cleanup).

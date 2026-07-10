@@ -1,59 +1,14 @@
 ---
-description: Create a git worktree for a branch (new or existing) and move into it — auto-detects which
+description: Create a git worktree for a branch (new or existing) and move into it — auto-detects which. Use when starting work on a ticket or issue on its own branch, isolated from the main checkout.
 argument-hint: <full-branch-name, e.g. feature/<initials>/<TICKET>/<slug>>
-allowed-tools: Bash(git worktree *), Bash(git fetch:*), Bash(git rev-parse:*), Bash(git ls-remote:*), Bash(git check-ref-format:*), Bash(git symbolic-ref:*), Bash(sh:*)
+allowed-tools: Bash(sh scripts/worktree-create.sh*), EnterWorktree
 ---
 
-Create a git worktree for `$ARGUMENTS` and relocate this session into it, per the worktree-per-issue flow (see
-`docs/worktrees.md`). This one command handles **both** a brand-new branch and an existing one (local or already on the
-remote) — git itself forces which, so nothing is guessed: you cannot create a branch that already exists, nor check out
-one that does not. `$ARGUMENTS` is the FULL branch name exactly as you want it (real `/` separators, no spaces); nothing
-is parsed, defaulted, or derived. Do these in order; STOP and report if any step fails:
+Create a worktree for `$ARGUMENTS` and relocate this session into it. Two steps:
 
-1. **Validate** `$ARGUMENTS` (see **Validation** below).
+1. Run `sh scripts/worktree-create.sh $ARGUMENTS`. The script validates the name, fetches, resolves whether the branch is new or existing (git decides — nothing is guessed), runs `git worktree add`, and provisions the worktree. On success its last lines are a `WORKTREE_PATH=<path>` line and a NEW/EXISTING report.
+   - A **non-zero exit** means it stopped and printed why (invalid name, branch already checked out elsewhere, …). Relay that and stop — do **not** continue to step 2.
 
-2. **Preflight.** Run `git fetch origin` so remote-tracking refs are current — this is what lets a remote-only branch
-   resolve, and what makes a freshly-created branch base on up-to-date trunk. Then run `git worktree prune` to clear
-   records for any worktree folders that were already deleted. A tidy main window is good hygiene but not required.
+2. Take the path from the `WORKTREE_PATH=` line and call `EnterWorktree` with that `path` to move this session into the worktree, so you can start working there right away. The worktree was created by plain `git worktree add`, so it persists regardless of the session — do **not** `ExitWorktree`. Then relay the script's NEW/EXISTING report verbatim.
 
-3. **Resolve existence.** Check whether `$ARGUMENTS` already exists:
-   - locally: `git rev-parse --verify --quiet "refs/heads/$ARGUMENTS"`
-   - on the remote: `git ls-remote --exit-code --heads origin "$ARGUMENTS"`
-
-4. **Create the worktree** at `.claude/worktrees/<flat>` (see **Flat name**). Exactly one action is valid:
-   - **Neither exists → NEW branch:** base it on the repo's default branch, resolved (not assumed) from the remote:
-     `BASE="$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || echo origin/main)"`, then
-     `git worktree add -b "$ARGUMENTS" ".claude/worktrees/<flat>" "$BASE"`. This bases the new branch on freshly-fetched
-     trunk regardless of this window's state, and works whether the default branch is `main`, `master`, or anything else
-     (falling back to `origin/main` only if `origin/HEAD` is unset).
-   - **Exists (local or remote) → EXISTING branch:** `git worktree add ".claude/worktrees/<flat>" "$ARGUMENTS"`
-     (a remote-only branch makes git DWIM a local tracking branch). If git reports the branch is already checked out in
-     another worktree, STOP and report.
-
-5. **Move in.** `EnterWorktree` with `path` `.claude/worktrees/<flat>` to relocate THIS session into the new worktree, so
-   you can start working there immediately. The worktree was created by plain `git worktree add`, so it persists on disk
-   regardless of the session — do **not** `ExitWorktree`.
-
-6. **Provision.** From inside the worktree, run `sh scripts/worktree-setup.sh` to set it up (see **Worktree setup**). With
-   husky installed, `post-checkout` already ran this on the `git worktree add`; the run-once marker makes this a fast
-   no-op. If a step fails, report it — the rest still completes.
-
-7. **Report — loudly and exactly** which action was taken (NEW vs EXISTING) and that you are now working inside the
-   worktree. This factual after-the-fact report is the safety net: seeing the exact branch name and action makes an
-   accidental stray branch or name collision obvious right away — so there is never a need to second-guess the name
-   beforehand.
-   - NEW: "Branch not found on local/origin → created **NEW** branch `$ARGUMENTS` off trunk. You are now in the worktree,
-     ready to work."
-   - EXISTING: "Found `$ARGUMENTS` (local/remote) → checked out **EXISTING SHARED** branch (do **not** force-push or
-     `git branch -D` it without coordinating). You are now in the worktree, ready to work."
-
-   Report the worktree path too. To work on a **different** issue in parallel with its own isolated context, open a
-   separate Claude session in that issue's worktree — not needed to work on this one.
-
-**Pushing.** From the worktree, a NEW branch pushes with `git push -u origin HEAD` (creates `$ARGUMENTS` on the remote,
-exact name). An EXISTING branch pushes with plain `git push` (tracking is already set). See `docs/worktrees.md` for the
-full flow and cleanup.
-
----
-
-{{WORKTREE_SHARED}}
+Do not run any git yourself and do not question or reformat the branch name — the script and its after-the-fact report are the safety net. To work on a **different** issue in parallel with its own isolated context, open a separate Claude session in that worktree's directory (not needed to work on this one). See `docs/worktrees.md` for the full flow.

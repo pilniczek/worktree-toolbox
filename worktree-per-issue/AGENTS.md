@@ -7,13 +7,53 @@ conventions (shared installer rules, how to test, ADRs) live in the [root AGENTS
 
 Its `install.sh` adds a `warn` helper alongside the shared `say`/`die`. It is the only tool with
 **interactive prompts**, so under `curl | sh` (no TTY) it takes all defaults. These env overrides
-give a non-interactive run the escape hatch the prompts would otherwise provide:
+are the non-interactive escape hatch for those prompts:
 
 - `WORKTREE_TOOLBOX_PM_INSTALL` — the exact install command to template into
   `worktree-setup.sh` / `docs/worktrees.md`, for repos whose command isn't the package
   manager's default (e.g. `npm run init`, not `npm install`).
 - `WORKTREE_TOOLBOX_PROVISION` — provisioning steps, **one command per line**, for the
   per-worktree setup the interactive loop would otherwise collect.
+
+## Commands are thin wrappers over scripts
+
+The three slash commands (`.claude/commands/worktree-*.md`) carry no logic - each just runs the
+matching `template/scripts/worktree-<name>.sh` and relays its output. The branchy work (mode
+detection, validation, the flat-name rule, the `git worktree` calls) lives in the scripts, so a
+command run costs no prompt reasoning. Shared rules live once in `scripts/worktree-common.sh`,
+sourced by all three - edit a shared rule **there**. When you change behavior, edit the script (and
+its `docs/worktree-<name>.md`), not the command file.
+
+`EnterWorktree` is the one thing that stays in the command prompt on purpose: relocating the Claude
+session is not a shell operation, so `/worktree-create` reads the script's `WORKTREE_PATH=` line and
+calls `EnterWorktree` itself (after the script has already provisioned the worktree).
+
+One in-script trick worth knowing: `worktree-remove.sh` re-execs the main checkout's own copy of
+itself before removing anything, so the running script never sits inside the directory being deleted
+(an open file blocks its own removal on Windows/MSYS).
+
+**Remove and heal operate from the main checkout, via `git -C "$MAIN" …`** - never via
+`ExitWorktree` and never assuming `/worktree-create` relocated the session. That's why they work
+from a session started *directly inside* the worktree, not only one create moved in. Keep all
+removal git calls anchored to `$MAIN` (`git -C "$MAIN" worktree remove/branch -d/worktree prune` in
+`worktree-remove.sh`); do not reintroduce a relative-path or session-location assumption.
+
+## Scripts must be dash-safe
+
+`template/scripts/*.sh` and `.husky/post-checkout` are run as `sh <script>`. On Linux `/bin/sh` is
+**dash** (POSIX-strict); on Windows Git Bash `sh` is **bash**. Code that only ran on Windows can
+silently break on Linux - two confirmed gotchas that bit this repo:
+
+1. **`echo` mangles backslashes on dash** (bash's doesn't). Never `echo` dynamic content (branch
+   names, `$err` from git, paths). Use the `wt_say` / `wt_warn` helpers in `worktree-common.sh`
+   (both `printf '%s\n'`), identical on both shells.
+2. **A redirect failure on a POSIX *special builtin* (`:`) exits non-interactive dash even with
+   `|| true`** (bash keeps going). `: > "$MARKER"` aborted `worktree-setup.sh` when `node_modules`
+   was absent. Guard the whole thing instead: `[ -d "$WT/node_modules" ] && { : > "$MARKER" …; }`.
+
+Before shipping a script change, lint with **`dash -n` AND `bash -n`**, and run the full
+create → heal → remove lifecycle forced through **both** shells (the repo-wide `install-matrix.sh`
+does not cover this runtime lifecycle).
 
 ## Vocabulary is deliberate
 
