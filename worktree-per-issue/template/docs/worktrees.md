@@ -245,3 +245,20 @@ lives in those scripts, with the shared rules in `scripts/worktree-common.sh`. T
 a plain file in your repo, run directly, with no build step. `/worktree-create` is the one command that also needs a
 Claude step — the script prints `WORKTREE_PATH=<path>` and the command calls `EnterWorktree` to relocate the session into
 the new worktree.
+
+### Shell style: POSIX `sh` (runs on Linux and Windows)
+
+The `scripts/worktree-*.sh` files are plain POSIX shell, so the **same** file runs under `dash`
+(Linux `/bin/sh`) and `bash` (Windows Git Bash). Two things follow, worth knowing before you edit:
+
+- **They use the older `[ … ]` test, not `[[ … ]]`.** `[[` is a bash keyword that dash does not
+  have, so it would break the scripts on Linux. If a code scanner (e.g. SonarQube rule S7688) tells
+  you to switch to `[[`, that is a false positive here - the `# NOSONAR: POSIX sh` comment on those
+  lines marks it as a deliberate, keep-as-is choice.
+- **Each function captures its arguments in `local` variables and ends with an explicit `return`.**
+  If you add or change one, follow the same shape: `local name="$1"` at the top, and a trailing
+  `return 0` (for helpers that just print or act) or `return $?` (when a caller checks the function's
+  success, e.g. `if ! fn ...`).
+
+After any change, sanity-check it in both shells: `dash -n scripts/worktree-<name>.sh` and
+`bash -n scripts/worktree-<name>.sh`.
