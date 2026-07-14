@@ -9,7 +9,7 @@ REF="${WORKTREE_TOOLBOX_REF:-main}"
 SUBDIR="work-report"   # this tool's folder within the repo
 CMD="template/.claude/commands/work-report.md"
 
-say() { printf '%s\n' "$*"; }
+say() { printf '%s\n' "$*"; return 0; }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
 # --- preflight -----------------------------------------------------------------------------

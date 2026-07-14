@@ -7,8 +7,8 @@
 # Use these instead of `echo`: dash's echo (Linux /bin/sh) interprets backslash escapes, bash's
 # (Windows Git Bash) does not, so `echo "$name"` mangles any backslash in a branch name or git
 # error message on Linux. printf '%s' is identical on both.
-wt_say()  { printf '%s\n' "$*"; }
-wt_warn() { printf '%s\n' "$*" >&2; }
+wt_say()  { printf '%s\n' "$*"; return 0; }
+wt_warn() { printf '%s\n' "$*" >&2; return 0; }
 
 # Validate against git's own rule (rejects spaces, `..`, `~^:?*`, and a leading `-` that could be
 # mistaken for a git option). A short or unusual name (e.g. `hotfix`, `feature/tst`) is a valid,
@@ -30,6 +30,7 @@ wt_validate() {
 wt_flat() {
   local branch="$1"
   printf '%s' "$branch" | tr '/' '+'
+  return 0
 }
 
 # Reverse of wt_flat: the flat name for a path inside a worktree. Empty if the path isn't under one.
@@ -37,12 +38,14 @@ wt_flat_from_path() {
   local path="$1"
   local rest="${path#*/.claude/worktrees/}"
   printf '%s' "${rest%%/*}"
+  return 0
 }
 
 # The first `worktree <path>` line of `git worktree list --porcelain` is always the primary
 # checkout. Space-safe.
 wt_main() {
   git worktree list --porcelain | sed -n '1s/^worktree //p'
+  return 0
 }
 
 # `exit` inside `$(...)` only kills the subshell, so callers must propagate:
@@ -51,6 +54,7 @@ wt_main_or_die() {
   m="$(wt_main)"
   [ -n "$m" ] || { wt_warn "Could not locate the main checkout (git worktree list)."; return 1; }  # NOSONAR: POSIX sh
   printf '%s' "$m"
+  return $?
 }
 
 # Honors WT_ORIGIN_PWD so a script that re-execs itself (see worktree-remove.sh) still tests the
@@ -67,4 +71,5 @@ wt_assert_live() {
   local main="$1" flat="$2"
   git -C "$main" worktree list --porcelain \
     | grep -qxF "worktree $main/.claude/worktrees/$flat"
+  return $?
 }

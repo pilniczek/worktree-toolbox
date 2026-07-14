@@ -60,6 +60,22 @@ keyword dash does not have** (`[[: not found`), so switching would break Linux. 
 and mark each flagged line with a trailing `# NOSONAR: POSIX sh` (SonarQube honors `NOSONAR` only on
 the issue's own line, never the line above).
 
+## Shell function conventions
+
+When you add or edit a function in any `*.sh`, follow these so the SonarQube scan stays clean and
+behavior stays correct. Both hold under dash and bash.
+
+1. **Capture positional parameters in `local` vars** (`shelldre:S7679`). At the top of the function
+   write `local name="$1"` (name it after the `# $1 = …` comment) and use `$name` in the body, not
+   `$1`/`$2`. `local` is not strict POSIX, but both target shells support it. Example:
+   `wt_assert_live()` opens with `local main="$1" flat="$2"`.
+2. **End every function with an explicit `return`** (`shelldre:S7682`) - and pick the right one:
+   - **`return 0`** for print-only / side-effect helpers whose exit status no caller inspects
+     (e.g. `wt_say`, `add_step`).
+   - **`return $?`** when a caller inspects the status - `if ! fn …`, `fn || exit 1`, or a checked
+     `$(fn)`. A bare `return 0` here silently breaks the caller: e.g. `wt_assert_live` must
+     `return $?`, otherwise every worktree reads as "live" and the guard never fires.
+
 ## Vocabulary is deliberate
 
 Use these terms precisely, and honor the *Avoid* notes.

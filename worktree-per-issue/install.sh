@@ -8,8 +8,8 @@ REPO="${WORKTREE_TOOLBOX_REPO:-pilniczek/worktree-toolbox}"
 REF="${WORKTREE_TOOLBOX_REF:-main}"
 SUBDIR="worktree-per-issue"   # this tool's folder within the repo
 
-say()  { printf '%s\n' "$*"; }
-warn() { printf 'WARN: %s\n' "$*" >&2; }
+say()  { printf '%s\n' "$*"; return 0; }
+warn() { printf 'WARN: %s\n' "$*" >&2; return 0; }
 die()  { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
 # --- preflight -----------------------------------------------------------------------------
@@ -63,6 +63,7 @@ ask() { # ask "<prompt>" "<default>" -> echoes the answer
   IFS= read -r _a </dev/tty || _a=""
   [ -z "$_a" ] && _a="$_d"  # NOSONAR: POSIX sh
   printf '%s' "$_a"
+  return 0
 }
 
 # --- package manager -----------------------------------------------------------------------
@@ -87,6 +88,7 @@ STEPS_FILE="$(mktemp)"
 add_step() { # $1 = provisioning command — appends the guarded command to STEPS_FILE
   local cmd="$1"
   printf '( cd "$WT" && %s ) || echo "worktree: '\''%s'\'' failed; run it manually in the worktree." >&2\n' "$cmd" "$cmd" >> "$STEPS_FILE"
+  return 0
 }
 say ""
 say "Per-worktree provisioning commands (e.g. a codegen step). They run once when a worktree is"
@@ -142,6 +144,7 @@ install_file() { # $1 = source, $2 = dest  (overwrites a differing existing file
     say "  + $dest"
   fi
   cp "$src" "$dest"
+  return $?
 }
 
 # Static copies (no install-time templating): the hook, the three command wrappers, the scripts.
@@ -166,6 +169,7 @@ tmpl() {
     s=s.split("{{PROVISION_STEPS}}").join(fs.readFileSync(process.env.STEPS_FILE,"utf8").trimEnd());
     fs.writeFileSync(process.argv[2],s);
   ' "$src" "$dst"
+  return $?
 }
 
 tmpl "$SRC/template/scripts/worktree-setup.sh" "$GEN"; install_file "$GEN" "scripts/worktree-setup.sh"

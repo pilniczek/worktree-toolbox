@@ -33,6 +33,7 @@ make_junction() {  # $1 = link path, $2 = absolute target
     *)
       ln -s "$target" "$link" ;;
   esac
+  return $?
 }
 
 # --- sibling links -------------------------------------------------------------------------

@@ -11,7 +11,7 @@ REF="${WORKTREE_TOOLBOX_REF:-main}"
 SUBDIR="vscode-claude-tabs"   # this tool's folder within the repo
 SCRIPT="gen-claude-tabs-keybinding.js"
 
-say()  { printf '%s\n' "$*"; }
+say()  { printf '%s\n' "$*"; return 0; }
 die()  { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
 command -v node >/dev/null 2>&1 || die "node is required but was not found on PATH."
