@@ -49,7 +49,7 @@ make_junction() {  # $1 = link path, $2 = absolute target
 # ourselves — never clobbering a file the worktree already has.
 if [ -f "$REPO/.worktreeinclude" ]; then  # NOSONAR: POSIX sh
   while IFS= read -r entry || [ -n "$entry" ]; do  # NOSONAR: POSIX sh
-    case "$entry" in ''|\#*) continue ;; esac
+    case "$entry" in ''|\#*) continue ;; *) ;; esac  # skip blanks/comments; real entries fall through
     [ -f "$REPO/$entry" ] || continue  # NOSONAR: POSIX sh
     [ -e "$WT/$entry" ] && continue  # NOSONAR: POSIX sh
     mkdir -p "$WT/$(dirname "$entry")"

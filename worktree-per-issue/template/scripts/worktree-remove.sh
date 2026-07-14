@@ -78,6 +78,7 @@ case "$BRANCH_RESULT" in
     wt_say "Branch '$BRANCH' is NOT merged → KEPT (commits are safe). Delete it later with"
     wt_say "  git branch -d '$BRANCH'   (after it merges)   or   git branch -D '$BRANCH'   (if you're sure)."
     wt_say "The remote branch was not touched." ;;
+  *) ;;   # detached/deleted/kept above are exhaustive; defensive default (S131)
 esac
 if wt_inside_worktree; then
   wt_say "You ran this from inside the worktree — its folder is now gone. If this session was"
