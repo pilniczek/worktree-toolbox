@@ -23,20 +23,20 @@ say "Target project: $TARGET"
 # --- source --------------------------------------------------------------------------------
 # Prefer an explicit local source, then a checkout next to this script, else download a tarball.
 SRC=""
-if [ -n "${WORKTREE_TOOLBOX_SRC:-}" ]; then
+if [ -n "${WORKTREE_TOOLBOX_SRC:-}" ]; then  # NOSONAR: POSIX sh
   SRC="$WORKTREE_TOOLBOX_SRC"
 else
   SELF_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" 2>/dev/null && pwd || true)"
-  if [ -n "$SELF_DIR" ] && [ -d "$SELF_DIR/template" ]; then
+  if [ -n "$SELF_DIR" ] && [ -d "$SELF_DIR/template" ]; then  # NOSONAR: POSIX sh
     SRC="$SELF_DIR"
   fi
 fi
 
 TMP=""
-cleanup() { [ -n "$TMP" ] && rm -rf "$TMP"; return 0; }  # never let the trap flip the exit status
+cleanup() { [ -n "$TMP" ] && rm -rf "$TMP"; return 0; }  # NOSONAR: POSIX sh; never let the trap flip the exit status
 trap cleanup EXIT INT TERM
 
-if [ -z "$SRC" ]; then
+if [ -z "$SRC" ]; then  # NOSONAR: POSIX sh
   command -v curl >/dev/null 2>&1 || die "curl is required to download the toolbox."
   command -v tar  >/dev/null 2>&1 || die "tar is required to unpack the toolbox."
   TMP="$(mktemp -d)"
@@ -45,7 +45,7 @@ if [ -z "$SRC" ]; then
     || die "download failed. Check WORKTREE_TOOLBOX_REPO / WORKTREE_TOOLBOX_REF."
   SRC="$TMP/$(ls "$TMP")/$SUBDIR"   # extracted root is <repo>-<ref>/; this tool sits one level deeper
 fi
-[ -d "$SRC/template" ] || die "toolbox source is missing template/ at $SRC."
+[ -d "$SRC/template" ] || die "toolbox source is missing template/ at $SRC."  # NOSONAR: POSIX sh
 
 # --- prompts -------------------------------------------------------------------------------
 # Detect a usable controlling terminal by actually opening /dev/tty — the device node can
@@ -53,23 +53,23 @@ fi
 # is done in a SUBSHELL: in dash a failed redirection on a compound command is fatal to the
 # whole shell, so isolating it keeps only the subshell dying and lets us branch on its status.
 if ( : >/dev/tty ) 2>/dev/null; then INTERACTIVE=1; else INTERACTIVE=0; fi
-[ "$INTERACTIVE" = 0 ] && warn "no TTY available — using defaults, no prompts."
+[ "$INTERACTIVE" = 0 ] && warn "no TTY available — using defaults, no prompts."  # NOSONAR: POSIX sh
 
 ask() { # ask "<prompt>" "<default>" -> echoes the answer
   _p="$1"; _d="${2:-}"
-  if [ "$INTERACTIVE" = 0 ]; then printf '%s' "$_d"; return; fi
-  if [ -n "$_d" ]; then printf '%s [%s]: ' "$_p" "$_d" >/dev/tty
+  if [ "$INTERACTIVE" = 0 ]; then printf '%s' "$_d"; return; fi  # NOSONAR: POSIX sh
+  if [ -n "$_d" ]; then printf '%s [%s]: ' "$_p" "$_d" >/dev/tty  # NOSONAR: POSIX sh
   else printf '%s: ' "$_p" >/dev/tty; fi
   IFS= read -r _a </dev/tty || _a=""
-  [ -z "$_a" ] && _a="$_d"
+  [ -z "$_a" ] && _a="$_d"  # NOSONAR: POSIX sh
   printf '%s' "$_a"
 }
 
 # --- package manager -----------------------------------------------------------------------
 PM_DEFAULT=npm
-if   [ -f pnpm-lock.yaml ]; then PM_DEFAULT=pnpm
-elif [ -f yarn.lock ];      then PM_DEFAULT=yarn
-elif [ -f package-lock.json ]; then PM_DEFAULT=npm
+if   [ -f pnpm-lock.yaml ]; then PM_DEFAULT=pnpm  # NOSONAR: POSIX sh
+elif [ -f yarn.lock ];      then PM_DEFAULT=yarn  # NOSONAR: POSIX sh
+elif [ -f package-lock.json ]; then PM_DEFAULT=npm  # NOSONAR: POSIX sh
 fi
 PM="$(ask "Package manager (npm/pnpm/yarn)" "$PM_DEFAULT")"
 case "$PM" in
@@ -93,34 +93,34 @@ say "created, and again on '/worktree-heal' (worktree heal). Leave the command b
 # Non-interactive escape hatch: one command per line in WORKTREE_TOOLBOX_PROVISION. Honored
 # regardless of TTY — the only way to configure provisioning steps under curl | sh. Fed via a
 # heredoc (not a pipe) so the loop runs in this shell and the steps land in STEPS_FILE.
-if [ -n "${WORKTREE_TOOLBOX_PROVISION:-}" ]; then
+if [ -n "${WORKTREE_TOOLBOX_PROVISION:-}" ]; then  # NOSONAR: POSIX sh
   say "  Preloading provisioning steps from WORKTREE_TOOLBOX_PROVISION (any interactive entries are appended):"
   while IFS= read -r cmd; do
-    [ -z "$cmd" ] && continue
+    [ -z "$cmd" ] && continue  # NOSONAR: POSIX sh
     add_step "$cmd"; say "    added: $cmd"
   done <<EOF
 $WORKTREE_TOOLBOX_PROVISION
 EOF
 fi
-while [ "$INTERACTIVE" = 1 ]; do
+while [ "$INTERACTIVE" = 1 ]; do  # NOSONAR: POSIX sh
   cmd="$(ask "  setup command (blank = done)" "")"
-  [ -z "$cmd" ] && break
+  [ -z "$cmd" ] && break  # NOSONAR: POSIX sh
   add_step "$cmd"; say "    added: $cmd"
 done
-[ -s "$STEPS_FILE" ] || printf '# (no provisioning steps configured)\n' > "$STEPS_FILE"
+[ -s "$STEPS_FILE" ] || printf '# (no provisioning steps configured)\n' > "$STEPS_FILE"  # NOSONAR: POSIX sh
 
 # --- worktreeinclude -----------------------------------------------------------------------
 INCLUDE_FILE="$(mktemp)"
 say ""
 say "Gitignored files to copy into each new worktree (e.g. .env, local settings)."
 say "Leave the path blank to finish."
-[ -f .env ] && { printf '%s\n' ".env" >> "$INCLUDE_FILE"; say "    added: .env"; }
-if [ "$INTERACTIVE" = 1 ]; then
+[ -f .env ] && { printf '%s\n' ".env" >> "$INCLUDE_FILE"; say "    added: .env"; }  # NOSONAR: POSIX sh
+if [ "$INTERACTIVE" = 1 ]; then  # NOSONAR: POSIX sh
   inc_default=".claude/settings.local.json"
   while :; do
     entry="$(ask "  file to copy (blank = done)" "$inc_default")"
     inc_default=""                       # default is offered on the first line only
-    [ -z "$entry" ] && break
+    [ -z "$entry" ] && break  # NOSONAR: POSIX sh
     printf '%s\n' "$entry" >> "$INCLUDE_FILE"; say "    added: $entry"
   done
 else
@@ -133,7 +133,7 @@ say "Installing files:"
 mkdir -p .claude/commands .husky scripts docs
 
 install_file() { # $1 = source, $2 = dest  (overwrites a differing existing file in place)
-  if [ -f "$2" ]; then
+  if [ -f "$2" ]; then  # NOSONAR: POSIX sh
     if cmp -s "$1" "$2"; then say "  = $2 (unchanged)"; return 0; fi
     say "  ~ $2 (replaced; review with git diff)"
   else
@@ -179,10 +179,10 @@ node "$MERGE" settings ".claude/settings.json" | sed 's/^/  settings: /' || warn
 node "$MERGE" vscode   ".vscode/settings.json" '4'                                               | sed 's/^/  vscode:   /' || warn "vscode settings merge reported an issue (see above)."
 
 # --- gitignore -----------------------------------------------------------------------------
-if [ -f .gitignore ] && grep -qxF '.claude/worktrees/' .gitignore; then
+if [ -f .gitignore ] && grep -qxF '.claude/worktrees/' .gitignore; then  # NOSONAR: POSIX sh
   say "  gitignore: .claude/worktrees/ already ignored"
 else
-  { [ -f .gitignore ] && [ -n "$(tail -c1 .gitignore 2>/dev/null)" ] && printf '\n'; :; } >> .gitignore
+  { [ -f .gitignore ] && [ -n "$(tail -c1 .gitignore 2>/dev/null)" ] && printf '\n'; :; } >> .gitignore  # NOSONAR: POSIX sh
   printf '# Claude Code worktrees (worktree-toolbox)\n.claude/worktrees/\n' >> .gitignore
   say "  gitignore: added .claude/worktrees/"
 fi
@@ -197,7 +197,7 @@ install_file "$TMP_INC" ".worktreeinclude"
 rm -f "$TMP_INC" "$STEPS_FILE" "$INCLUDE_FILE"
 
 # --- husky ---------------------------------------------------------------------------------
-if [ ! -d .husky ] || ! { [ -f package.json ] && grep -q '"husky"' package.json; }; then
+if [ ! -d .husky ] || ! { [ -f package.json ] && grep -q '"husky"' package.json; }; then  # NOSONAR: POSIX sh
   say ""
   warn "husky was not detected. The .husky/post-checkout hook (a convenience that provisions a"
   warn "worktree created via a bare 'git worktree add' on the CLI) only fires when husky is"

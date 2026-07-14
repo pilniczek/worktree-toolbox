@@ -14,7 +14,7 @@ wt_warn() { printf '%s\n' "$*" >&2; }
 # mistaken for a git option). A short or unusual name (e.g. `hotfix`, `feature/tst`) is a valid,
 # deliberate choice — never a reason to stop.
 wt_validate() {
-  if [ -z "$1" ]; then
+  if [ -z "$1" ]; then  # NOSONAR: POSIX sh
     wt_warn "No branch name given."
     return 1
   fi
@@ -46,7 +46,7 @@ wt_main() {
 # `MAIN="$(wt_main_or_die)" || exit 1`.
 wt_main_or_die() {
   m="$(wt_main)"
-  [ -n "$m" ] || { wt_warn "Could not locate the main checkout (git worktree list)."; return 1; }
+  [ -n "$m" ] || { wt_warn "Could not locate the main checkout (git worktree list)."; return 1; }  # NOSONAR: POSIX sh
   printf '%s' "$m"
 }
 

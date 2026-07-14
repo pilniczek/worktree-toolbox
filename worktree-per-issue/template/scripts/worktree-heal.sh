@@ -9,7 +9,7 @@ MAIN="$(wt_main_or_die)" || exit 1
 ARG="${1:-}"
 
 # --- locate worktree -----------------------------------------------------------------------
-if [ -n "$ARG" ]; then
+if [ -n "$ARG" ]; then  # NOSONAR: POSIX sh
   wt_validate "$ARG" || exit 1
   FLAT="$(wt_flat "$ARG")"
   if ! wt_assert_live "$MAIN" "$FLAT"; then

@@ -55,6 +55,11 @@ Before shipping a script change, lint with **`dash -n` AND `bash -n`**, and run 
 create → heal → remove lifecycle forced through **both** shells (the repo-wide `install-matrix.sh`
 does not cover this runtime lifecycle).
 
+SonarQube (`shelldre:S7688`) flags every `[ … ]` test and suggests `[[ … ]]`. That is a **bash
+keyword dash does not have** (`[[: not found`), so switching would break Linux. We keep POSIX `[ … ]`
+and mark each flagged line with a trailing `# NOSONAR: POSIX sh` (SonarQube honors `NOSONAR` only on
+the issue's own line, never the line above).
+
 ## Vocabulary is deliberate
 
 Use these terms precisely, and honor the *Avoid* notes.

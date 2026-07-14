@@ -19,20 +19,20 @@ command -v node >/dev/null 2>&1 || die "node is required but was not found on PA
 # --- source --------------------------------------------------------------------------------
 # Prefer an explicit local source, then a checkout next to this script, else download a tarball.
 SRC=""
-if [ -n "${WORKTREE_TOOLBOX_SRC:-}" ]; then
+if [ -n "${WORKTREE_TOOLBOX_SRC:-}" ]; then  # NOSONAR: POSIX sh
   SRC="$WORKTREE_TOOLBOX_SRC"
 else
   SELF_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" 2>/dev/null && pwd || true)"
-  if [ -n "$SELF_DIR" ] && [ -f "$SELF_DIR/$SCRIPT" ]; then
+  if [ -n "$SELF_DIR" ] && [ -f "$SELF_DIR/$SCRIPT" ]; then  # NOSONAR: POSIX sh
     SRC="$SELF_DIR"
   fi
 fi
 
 TMP=""
-cleanup() { [ -n "$TMP" ] && rm -rf "$TMP"; return 0; }  # never let the trap flip the exit status
+cleanup() { [ -n "$TMP" ] && rm -rf "$TMP"; return 0; }  # NOSONAR: POSIX sh; never let the trap flip the exit status
 trap cleanup EXIT INT TERM
 
-if [ -z "$SRC" ]; then
+if [ -z "$SRC" ]; then  # NOSONAR: POSIX sh
   command -v curl >/dev/null 2>&1 || die "curl is required to download the tool."
   command -v tar  >/dev/null 2>&1 || die "tar is required to unpack the tool."
   TMP="$(mktemp -d)"
@@ -41,7 +41,7 @@ if [ -z "$SRC" ]; then
     || die "download failed. Check WORKTREE_TOOLBOX_REPO / WORKTREE_TOOLBOX_REF."
   SRC="$TMP/$(ls "$TMP")/$SUBDIR"   # extracted root is <repo>-<ref>/; this tool sits one level deeper
 fi
-[ -f "$SRC/$SCRIPT" ] || die "generator not found at $SRC/$SCRIPT."
+[ -f "$SRC/$SCRIPT" ] || die "generator not found at $SRC/$SCRIPT."  # NOSONAR: POSIX sh
 
 # --- install -------------------------------------------------------------------------------
 DEST="${INSTALL_DIR:-$HOME/.claude/scripts}"

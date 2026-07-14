@@ -12,7 +12,7 @@
 . "$(dirname "$0")/worktree-common.sh"           # sourced on both the pre- and post-re-exec run
 MAIN="$(wt_main_or_die)" || exit 1               # needed here to locate the re-exec target below;
                                                  # the re-execed process recomputes it (cheap, location-independent)
-if [ "${WT_REEXEC:-0}" != 1 ]; then
+if [ "${WT_REEXEC:-0}" != 1 ]; then  # NOSONAR: POSIX sh
   WT_ORIGIN_PWD="$PWD" WT_REEXEC=1 exec sh "$MAIN/scripts/worktree-remove.sh" "$@"
 fi
 cd "$MAIN" || exit 1                              # leave the (to-be-deleted) worktree cwd
@@ -21,7 +21,7 @@ ARG="${1:-}"
 
 # --- mode ----------------------------------------------------------------------------------
 if wt_inside_worktree; then
-  if [ -n "$ARG" ]; then
+  if [ -n "$ARG" ]; then  # NOSONAR: POSIX sh
     wt_warn "You're inside a worktree: run /worktree-remove with no argument to close it, or run"
     wt_warn "/worktree-remove <branch> from the main checkout to close a different one."
     exit 1
@@ -30,7 +30,7 @@ if wt_inside_worktree; then
   WT="$MAIN/.claude/worktrees/$FLAT"
   BRANCH="$(git -C "$WT" rev-parse --abbrev-ref HEAD 2>/dev/null)"
 else
-  if [ -z "$ARG" ]; then
+  if [ -z "$ARG" ]; then  # NOSONAR: POSIX sh
     wt_warn "Run /worktree-remove <branch> to name the worktree to close, or run /worktree-remove"
     wt_warn "from inside a worktree to close that one."
     exit 1
@@ -58,7 +58,7 @@ fi
 # --- branch --------------------------------------------------------------------------------
 # A worktree on a detached HEAD has no branch to delete (rev-parse yields the literal 'HEAD', or
 # empty on failure) — skip the delete rather than mislabel 'HEAD' as an unmerged branch.
-if [ -z "$BRANCH" ] || [ "$BRANCH" = HEAD ]; then
+if [ -z "$BRANCH" ] || [ "$BRANCH" = HEAD ]; then  # NOSONAR: POSIX sh
   BRANCH_RESULT=detached
 elif git -C "$MAIN" branch -d "$BRANCH" >/dev/null 2>&1; then
   BRANCH_RESULT=deleted

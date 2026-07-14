@@ -5,7 +5,7 @@
 set -e
 
 FORCE=0
-[ "$1" = "--force" ] && FORCE=1
+[ "$1" = "--force" ] && FORCE=1  # NOSONAR: POSIX sh
 
 WT="$(pwd)"
 case "$WT" in
@@ -15,7 +15,7 @@ case "$WT" in
     # `git worktree prune` drops only dead records, never a live worktree or branch, so it's
     # safe unconditionally. Guard to the main tree (git-dir == git-common-dir) so a linked
     # worktree outside .claude/worktrees/ no-ops.
-    if [ "$(git rev-parse --git-dir 2>/dev/null)" = "$(git rev-parse --git-common-dir 2>/dev/null)" ]; then
+    if [ "$(git rev-parse --git-dir 2>/dev/null)" = "$(git rev-parse --git-common-dir 2>/dev/null)" ]; then  # NOSONAR: POSIX sh
       git worktree prune 2>/dev/null || true
     fi
     exit 0
@@ -45,11 +45,11 @@ make_junction() {  # $1 = link path, $2 = absolute target
 # Copy the gitignored files listed in `.worktreeinclude` from the main checkout. This flow uses plain
 # `git worktree add`, which does NOT honor Claude's native `.worktreeinclude`, so we do the copy
 # ourselves — never clobbering a file the worktree already has.
-if [ -f "$REPO/.worktreeinclude" ]; then
-  while IFS= read -r entry || [ -n "$entry" ]; do
+if [ -f "$REPO/.worktreeinclude" ]; then  # NOSONAR: POSIX sh
+  while IFS= read -r entry || [ -n "$entry" ]; do  # NOSONAR: POSIX sh
     case "$entry" in ''|\#*) continue ;; esac
-    [ -f "$REPO/$entry" ] || continue
-    [ -e "$WT/$entry" ] && continue
+    [ -f "$REPO/$entry" ] || continue  # NOSONAR: POSIX sh
+    [ -e "$WT/$entry" ] && continue  # NOSONAR: POSIX sh
     mkdir -p "$WT/$(dirname "$entry")"
     cp "$REPO/$entry" "$WT/$entry" 2>/dev/null || true
   done < "$REPO/.worktreeinclude"
@@ -61,8 +61,8 @@ fi
 # only in the worktree. `-e` follows into a real dir, so this is a no-op once provisioned.
 # Fallbacks: a full copy (cross-filesystem / Windows, where hardlinks can fail), then a real
 # install if the main checkout has none yet.
-if [ ! -e "$WT/node_modules" ]; then
-  if [ -d "$REPO/node_modules" ]; then
+if [ ! -e "$WT/node_modules" ]; then  # NOSONAR: POSIX sh
+  if [ -d "$REPO/node_modules" ]; then  # NOSONAR: POSIX sh
     cp -al "$REPO/node_modules" "$WT/node_modules" 2>/dev/null \
       || cp -a "$REPO/node_modules" "$WT/node_modules" 2>/dev/null \
       || ( cd "$WT" && {{PM_INSTALL}} )
@@ -72,10 +72,10 @@ if [ ! -e "$WT/node_modules" ]; then
 fi
 
 MARKER="$WT/node_modules/.wt-provisioned"
-if [ "$FORCE" = 1 ] || [ ! -e "$MARKER" ]; then
+if [ "$FORCE" = 1 ] || [ ! -e "$MARKER" ]; then  # NOSONAR: POSIX sh
 {{PROVISION_STEPS}}
   # Write the marker only if its node_modules parent exists. A failed redirect on ':' (a POSIX
   # special builtin) aborts a non-interactive dash (Linux /bin/sh) despite '|| true'; bash does
   # not. If node_modules is absent (no deps / a non-node repo), skip it so setup simply re-runs.
-  [ -d "$WT/node_modules" ] && { : > "$MARKER" 2>/dev/null || true; }
+  [ -d "$WT/node_modules" ] && { : > "$MARKER" 2>/dev/null || true; }  # NOSONAR: POSIX sh
 fi

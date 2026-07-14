@@ -10,7 +10,7 @@ MAIN="$(wt_main_or_die)" || exit 1
 ARG="${1:-}"
 
 # --- validate ------------------------------------------------------------------------------
-if [ -z "$ARG" ]; then
+if [ -z "$ARG" ]; then  # NOSONAR: POSIX sh
   wt_warn "Run /worktree-create <full-branch-name>, e.g. feature/<initials>/<TICKET>/<slug>."
   exit 1
 fi
@@ -31,7 +31,7 @@ elif git -C "$MAIN" ls-remote --exit-code --heads origin "$ARG" >/dev/null 2>&1;
 fi
 
 # --- create --------------------------------------------------------------------------------
-if [ "$EXISTS" = 0 ]; then
+if [ "$EXISTS" = 0 ]; then  # NOSONAR: POSIX sh
   # NEW branch: base it on freshly-fetched trunk, resolved (not assumed) from the remote.
   BASE="$(git -C "$MAIN" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || echo origin/main)"
   if ! err="$(git -C "$MAIN" worktree add -b "$ARG" "$WT" "$BASE" 2>&1)"; then
@@ -57,7 +57,7 @@ fi
 
 # The WORKTREE_PATH line is machine-read by the caller to EnterWorktree.
 wt_say "WORKTREE_PATH=$WT"
-if [ "$ACTION" = NEW ]; then
+if [ "$ACTION" = NEW ]; then  # NOSONAR: POSIX sh
   wt_say "Branch not found on local/origin → created NEW branch '$ARG' off trunk ($BASE)."
 else
   wt_say "Found '$ARG' (local/remote) → checked out EXISTING SHARED branch (do NOT force-push or 'git branch -D' it without coordinating)."

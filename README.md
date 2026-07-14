@@ -95,3 +95,12 @@ sandboxed (never touches your real `~/.claude` or VS Code config). Needs `git` +
 ```sh
 sh test/install-matrix.sh
 ```
+
+### A note on the shell style
+
+Every `.sh` script here is plain POSIX shell, so the same file runs under **dash** (Linux
+`/bin/sh`) and **bash** (Windows Git Bash). That is why the scripts use the older `[ … ]` test form
+instead of bash's `[[ … ]]`: `[[` is a bash keyword that simply does not exist in dash, so using it
+would break every script on Linux. A code scanner (SonarQube) keeps suggesting `[[`; we decline it
+on purpose and tag those lines with a `# NOSONAR: POSIX sh` comment so the warning stays quiet. If
+you contribute a script change, check it with both `dash -n yourscript.sh` and `bash -n yourscript.sh`.

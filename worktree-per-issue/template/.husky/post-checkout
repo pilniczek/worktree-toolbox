@@ -3,7 +3,7 @@
 # a fresh worktree checkout is the precise signal (prev = null SHA and branch-flag = 1).
 # Shebang is REQUIRED: core.hooksPath=.husky makes git exec this file directly (without
 # it VS Code's Git fails with "cannot spawn ... Exec format error").
-[ "$1" = "0000000000000000000000000000000000000000" ] && [ "$3" = "1" ] || exit 0
+[ "$1" = "0000000000000000000000000000000000000000" ] && [ "$3" = "1" ] || exit 0  # NOSONAR: POSIX sh
 # Only act inside a Claude worktree dir; normal clones/branch switches are no-ops.
 case "$(pwd)" in */.claude/worktrees/*) ;; *) exit 0 ;; esac
 # Setup script lives in the main checkout under scripts/ (NOT .claude/: some remotes reject
