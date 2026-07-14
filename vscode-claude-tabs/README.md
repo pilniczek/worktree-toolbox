@@ -44,6 +44,10 @@ Code `keybindings.json`:
 }
 ```
 
+Under WSL the `text` is instead
+`wsl.exe -d "<distro>" --cd "/path/to/main" -- bash -lic "claude"\r` - see [Requirements](#requirements)
+for why.
+
 It's **idempotent and self-migrating**: it replaces the binding it manages (detected by signature,
 so changing the key removes the old one) and leaves your other keybindings untouched.
 
@@ -52,7 +56,12 @@ so changing the key removes the old one) and leaves your other keybindings untou
 - Node.js
 - VS Code, with `claude` on your PATH
 - Works on WSL (targets the Windows-host `keybindings.json`, since keybindings are application-scoped
-  and shared by the remote window), native Linux, macOS, and Windows.
+  and shared by the remote window), native Linux, macOS, and Windows. Under WSL the command is wrapped
+  in `wsl.exe` so the chord also works from a **native-Windows** VS Code window, whose editor terminal
+  is PowerShell/CMD and can't `cd` into a Linux path. `wsl.exe` is a console program, so it runs
+  in-place inside the editor tab (not a separate window) and enters WSL from either shell type. This
+  needs WSL interop enabled (`appendWindowsPath`, the default) so `wsl.exe` is reachable, and it runs
+  `claude` under a login shell so your PATH (`~/.local/bin`, nvm, ...) is loaded.
 
 ## Install
 
@@ -117,5 +126,9 @@ Set env vars when running the generator or `install.sh`:
 
 - On a very slow machine the command may be typed before the new terminal finishes initializing; shells
   buffer input, so this is almost always fine.
-- `keybindings.json` is application-scoped, so this repo's absolute worktree paths also exist in other
-  VS Code windows (harmless — pressing the chord elsewhere just `cd`s into those paths).
+- `keybindings.json` is application-scoped, so this repo's absolute worktree paths also exist in every
+  VS Code window. Pressing the chord in another window just opens `claude` in those worktrees. Under
+  WSL the paths are Linux paths, so the command is wrapped in `wsl.exe` to stay valid whether the
+  window's terminal is PowerShell/CMD (native Windows) or bash (WSL Remote) — see Requirements.
+- Under WSL, `claude` runs via a login+interactive shell (`bash -lic`); on some setups that prints a
+  harmless `cannot set terminal process group` warning above the session.

@@ -5,6 +5,10 @@
  * run it whenever worktrees change. Idempotent and self-migrating (replaces only the binding it
  * manages, detected by signature). Config via env: CLAUDE_WT_KEY, CLAUDE_WT_COMMAND,
  * VSCODE_KEYBINDINGS_PATH. See README.md for the rationale (why a keybinding, WSL, caveats).
+ *
+ * Under WSL the binding lands in the Windows-host keybindings.json (shared by native-Windows
+ * windows, whose terminal is PowerShell/CMD and can't cd into a Linux path), so each command is
+ * wrapped in `wsl.exe` — which runs in-place inside the editor tab and enters WSL from either shell.
  */
 'use strict';
 
@@ -16,6 +20,7 @@ const { execFileSync } = require('node:child_process');
 const KEY = process.env.CLAUDE_WT_KEY || 'ctrl+alt+w';
 const CLAUDE_CMD = process.env.CLAUDE_WT_COMMAND || 'claude';
 const HEADER = '// Place your key bindings in this file to override the defaults';
+const DISTRO = process.env.WSL_DISTRO_NAME || '';
 
 function sh(cmd, args) {
   // Ignore stderr: cmd.exe emits a harmless "UNC paths are not supported" warning when launched
@@ -31,6 +36,8 @@ function isWSL() {
     return false;
   }
 }
+
+const WSL = isWSL();
 
 // --- keybindings path ---------------------------------------------------------------------
 function resolveKeybindingsPath() {
@@ -75,13 +82,24 @@ function listWorktrees() {
 }
 
 // --- build binding ------------------------------------------------------------------------
+// \r (0x0D) submits the line. Double-quote paths to tolerate special chars.
+function terminalText(wt) {
+  if (WSL) {
+    // The binding lives in the Windows-host keybindings.json, shared by native-Windows windows
+    // whose terminal is PowerShell/CMD and can't cd into a Linux path. wsl.exe runs in-place
+    // inside the editor tab and enters WSL from either shell; bash -lic loads PATH for `claude`.
+    const distro = DISTRO ? ` -d "${DISTRO}"` : '';
+    return `wsl.exe${distro} --cd "${wt}" -- bash -lic "${CLAUDE_CMD}"\r`;
+  }
+  return `cd "${wt}" && ${CLAUDE_CMD}\r`;
+}
+
 function buildBinding(worktrees) {
   const commands = [];
   for (const wt of worktrees) {
     commands.push('workbench.action.createTerminalEditor', {
       command: 'workbench.action.terminal.sendSequence',
-      // \r (0x0D) submits the line. Double-quote the path to tolerate special chars.
-      args: { text: `cd "${wt}" && ${CLAUDE_CMD}\r` },
+      args: { text: terminalText(wt) },
     });
   }
   return { key: KEY, command: 'runCommands', args: { commands } };
