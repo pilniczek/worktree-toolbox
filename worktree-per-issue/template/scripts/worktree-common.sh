@@ -14,12 +14,13 @@ wt_warn() { printf '%s\n' "$*" >&2; }
 # mistaken for a git option). A short or unusual name (e.g. `hotfix`, `feature/tst`) is a valid,
 # deliberate choice — never a reason to stop.
 wt_validate() {
-  if [ -z "$1" ]; then  # NOSONAR: POSIX sh
+  local branch="$1"
+  if [ -z "$branch" ]; then  # NOSONAR: POSIX sh
     wt_warn "No branch name given."
     return 1
   fi
-  if ! git check-ref-format --branch "$1" >/dev/null 2>&1; then
-    wt_warn "\"$1\" is not a legal git branch name (git rejects spaces, '..', '~^:?*', and a leading '-')."
+  if ! git check-ref-format --branch "$branch" >/dev/null 2>&1; then
+    wt_warn "\"$branch\" is not a legal git branch name (git rejects spaces, '..', '~^:?*', and a leading '-')."
     return 1
   fi
   return 0
@@ -27,12 +28,14 @@ wt_validate() {
 
 # The worktree directory is .claude/worktrees/<flat>; the branch keeps its real `/` separators.
 wt_flat() {
-  printf '%s' "$1" | tr '/' '+'
+  local branch="$1"
+  printf '%s' "$branch" | tr '/' '+'
 }
 
 # Reverse of wt_flat: the flat name for a path inside a worktree. Empty if the path isn't under one.
 wt_flat_from_path() {
-  rest="${1#*/.claude/worktrees/}"
+  local path="$1"
+  local rest="${path#*/.claude/worktrees/}"
   printf '%s' "${rest%%/*}"
 }
 
@@ -61,6 +64,7 @@ wt_inside_worktree() {
 
 # Matches the absolute path so a substring can't false-match.
 wt_assert_live() {
-  git -C "$1" worktree list --porcelain \
-    | grep -qxF "worktree $1/.claude/worktrees/$2"
+  local main="$1" flat="$2"
+  git -C "$main" worktree list --porcelain \
+    | grep -qxF "worktree $main/.claude/worktrees/$flat"
 }

@@ -26,11 +26,12 @@ REPO="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)"   # main checkout roo
 WT_PARENT="$(dirname "$WT")"
 
 make_junction() {  # $1 = link path, $2 = absolute target
+  local link="$1" target="$2"
   case "$(uname -s)" in
     *MINGW*|*MSYS*|*CYGWIN*)
-      cmd //c mklink //J "$(cygpath -w "$1")" "$(cygpath -w "$2")" ;;
+      cmd //c mklink //J "$(cygpath -w "$link")" "$(cygpath -w "$target")" ;;
     *)
-      ln -s "$2" "$1" ;;
+      ln -s "$target" "$link" ;;
   esac
 }
 

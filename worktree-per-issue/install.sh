@@ -56,7 +56,7 @@ if ( : >/dev/tty ) 2>/dev/null; then INTERACTIVE=1; else INTERACTIVE=0; fi
 [ "$INTERACTIVE" = 0 ] && warn "no TTY available — using defaults, no prompts."  # NOSONAR: POSIX sh
 
 ask() { # ask "<prompt>" "<default>" -> echoes the answer
-  _p="$1"; _d="${2:-}"
+  local _p="$1" _d="${2:-}" _a
   if [ "$INTERACTIVE" = 0 ]; then printf '%s' "$_d"; return; fi  # NOSONAR: POSIX sh
   if [ -n "$_d" ]; then printf '%s [%s]: ' "$_p" "$_d" >/dev/tty  # NOSONAR: POSIX sh
   else printf '%s: ' "$_p" >/dev/tty; fi
@@ -85,7 +85,8 @@ PM_INSTALL="${WORKTREE_TOOLBOX_PM_INSTALL:-$PM_INSTALL}"
 # --- provisioning --------------------------------------------------------------------------
 STEPS_FILE="$(mktemp)"
 add_step() { # $1 = provisioning command — appends the guarded command to STEPS_FILE
-  printf '( cd "$WT" && %s ) || echo "worktree: '\''%s'\'' failed; run it manually in the worktree." >&2\n' "$1" "$1" >> "$STEPS_FILE"
+  local cmd="$1"
+  printf '( cd "$WT" && %s ) || echo "worktree: '\''%s'\'' failed; run it manually in the worktree." >&2\n' "$cmd" "$cmd" >> "$STEPS_FILE"
 }
 say ""
 say "Per-worktree provisioning commands (e.g. a codegen step). They run once when a worktree is"
@@ -133,13 +134,14 @@ say "Installing files:"
 mkdir -p .claude/commands .husky scripts docs
 
 install_file() { # $1 = source, $2 = dest  (overwrites a differing existing file in place)
-  if [ -f "$2" ]; then  # NOSONAR: POSIX sh
-    if cmp -s "$1" "$2"; then say "  = $2 (unchanged)"; return 0; fi
-    say "  ~ $2 (replaced; review with git diff)"
+  local src="$1" dest="$2"
+  if [ -f "$dest" ]; then  # NOSONAR: POSIX sh
+    if cmp -s "$src" "$dest"; then say "  = $dest (unchanged)"; return 0; fi
+    say "  ~ $dest (replaced; review with git diff)"
   else
-    say "  + $2"
+    say "  + $dest"
   fi
-  cp "$1" "$2"
+  cp "$src" "$dest"
 }
 
 # Static copies (no install-time templating): the hook, the three command wrappers, the scripts.
@@ -156,13 +158,14 @@ GEN="$(mktemp)"
 # tmpl SRC DST — copy SRC to DST substituting the install-time template tokens: {{PM_INSTALL}}
 # everywhere, and {{PROVISION_STEPS}} where present (absent in docs/worktrees.md — a no-op there).
 tmpl() {
+  local src="$1" dst="$2"
   PM_INSTALL="$PM_INSTALL" STEPS_FILE="$STEPS_FILE" node -e '
     const fs=require("fs");
     let s=fs.readFileSync(process.argv[1],"utf8");
     s=s.split("{{PM_INSTALL}}").join(process.env.PM_INSTALL);
     s=s.split("{{PROVISION_STEPS}}").join(fs.readFileSync(process.env.STEPS_FILE,"utf8").trimEnd());
     fs.writeFileSync(process.argv[2],s);
-  ' "$1" "$2"
+  ' "$src" "$dst"
 }
 
 tmpl "$SRC/template/scripts/worktree-setup.sh" "$GEN"; install_file "$GEN" "scripts/worktree-setup.sh"
