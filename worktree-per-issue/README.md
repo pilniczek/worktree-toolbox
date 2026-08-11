@@ -48,15 +48,15 @@ nothing twice.
 | `scripts/worktree-common.sh` | shared rules (branch-name validation, the flat-name rule, find-main) sourced by the three scripts |
 | `scripts/worktree-setup.sh` | per-worktree setup (`node_modules`, your setup steps, `.worktreeinclude` config) |
 | `docs/worktrees.md` | full documentation of the flow |
+| `.worktreeinclude` | the gitignored local files copied into each worktree — generated from your answers, so a re-run replaces it (review with `git diff`) |
 
 It also merges into these files without overwriting:
 
 | Path | Merged in |
 | --- | --- |
-| `.claude/settings.json` | a `Bash(git worktree *)` allow entry |
+| `.claude/settings.json` | four `permissions.allow` entries: one `Bash(sh scripts/worktree-<name>.sh*)` per slash command, plus `Bash(git worktree *)` for manual use |
 | `.vscode/settings.json` | `git.detectWorktrees` + `git.repositoryScanMaxDepth` |
 | `.gitignore` | ignores `.claude/worktrees/` |
-| `.worktreeinclude` | the gitignored local files copied into each worktree |
 
 ## What it asks
 

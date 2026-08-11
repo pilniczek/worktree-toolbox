@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# Install-combination smoke test for worktree-toolbox (W=worktree-per-issue, R=work-report,
+# Install-combination smoke test for worktree-toolbox (W=worktree-per-issue,
 # V=vscode-claude-tabs). Offline and sandboxed; see "How to test" in ../AGENTS.md for the contract.
 # Requires: git, node, sh.  Run from anywhere:  sh test/install-matrix.sh
 set -u
@@ -9,7 +9,6 @@ set -u
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 REPO="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 W_SRC="$REPO/worktree-per-issue"
-R_SRC="$REPO/work-report"
 V_SRC="$REPO/vscode-claude-tabs"
 
 command -v git  >/dev/null 2>&1 || { echo "git is required."  >&2; exit 1; }
@@ -38,7 +37,6 @@ run_installer() {  # $1 = installer path; returns its exit status; output append
 # checkout instead of downloading. INSTALL_DIR / VSCODE_KEYBINDINGS_PATH / HOME are exported once
 # per combo (below) and inherited by the setsid child.
 install_W() { WORKTREE_TOOLBOX_SRC="$W_SRC" run_installer "$W_SRC/install.sh"; }
-install_R() { WORKTREE_TOOLBOX_SRC="$R_SRC" run_installer "$R_SRC/install.sh"; }
 install_V() { WORKTREE_TOOLBOX_SRC="$V_SRC" run_installer "$V_SRC/install.sh"; }
 
 # --- assertions ----------------------------------------------------------------------------
@@ -80,11 +78,6 @@ assert_W() {  # worktree-per-issue artifacts (installed into the target project)
   [ "$(count_lines '.claude/worktrees/' "$TARGET/.gitignore")" = 1 ] \
     || fail ".claude/worktrees/ not exactly once in .gitignore"
 }
-assert_R() {  # work-report artifacts
-  assert_file "$TARGET/.claude/commands/work-report.md"
-  [ "$(count_lines '/WORK-REPORT.md' "$TARGET/.gitignore")" = 1 ] \
-    || fail "/WORK-REPORT.md not exactly once in .gitignore"
-}
 assert_V() {  # vscode-claude-tabs artifacts (user-global, sandboxed)
   assert_file "$SANDBOX_SCRIPTS/gen-claude-tabs-keybinding.js"
   assert_file "$SANDBOX_KEYBINDINGS"
@@ -113,7 +106,7 @@ begin_combo() {  # fresh sandboxed target repo + per-combo env; sets TARGET/LOG,
   export INSTALL_DIR="$SANDBOX_SCRIPTS"
   export VSCODE_KEYBINDINGS_PATH="$SANDBOX_KEYBINDINGS"
   COMBO_FAIL=0
-  # No .gitignore yet, so we can prove V-alone creates none and that W/R create theirs.
+  # No .gitignore yet, so we can prove V-alone creates none and that W creates its own.
   git_init_repo "$TARGET" || fail "throwaway repo init failed"
   cd "$TARGET" || fail "cannot cd into target"
 }
@@ -129,7 +122,7 @@ report_combo() {  # $1 = label — back to the repo, print PASS/FAIL, and on fai
   fi
 }
 
-run_combo() {  # $1 = human label, $2 = install-order string of letters (e.g. "WR")
+run_combo() {  # $1 = human label, $2 = install-order string of letters (e.g. "WV")
   label="$1"; order="$2"
   begin_combo
 
@@ -138,7 +131,6 @@ run_combo() {  # $1 = human label, $2 = install-order string of letters (e.g. "W
   while [ "$i" -le "${#order}" ]; do
     case "$(printf '%s' "$order" | cut -c "$i")" in
       W) install_W || fail "worktree-per-issue installer exited nonzero" ;;
-      R) install_R || fail "work-report installer exited nonzero" ;;
       V) install_V || fail "vscode-claude-tabs installer exited nonzero" ;;
     esac
     i=$((i + 1))
@@ -146,7 +138,6 @@ run_combo() {  # $1 = human label, $2 = install-order string of letters (e.g. "W
 
   # per-tool artifact assertions
   case "$order" in *W*) assert_W ;; esac
-  case "$order" in *R*) assert_R ;; esac
   case "$order" in *V*) assert_V ;; esac
   assert_no_clobber
   # V installed alone must leave the project completely untouched
@@ -158,13 +149,10 @@ run_combo() {  # $1 = human label, $2 = install-order string of letters (e.g. "W
 
   # idempotency: reinstall every tool in the combo once more — no clobbers, no duplicate ignores
   case "$order" in *W*) install_W || fail "worktree-per-issue reinstall exited nonzero" ;; esac
-  case "$order" in *R*) install_R || fail "work-report reinstall exited nonzero" ;; esac
   case "$order" in *V*) install_V || fail "vscode-claude-tabs reinstall exited nonzero" ;; esac
   assert_no_clobber
   case "$order" in *W*) [ "$(count_lines '.claude/worktrees/' "$TARGET/.gitignore")" = 1 ] \
       || fail ".claude/worktrees/ duplicated in .gitignore after reinstall" ;; esac
-  case "$order" in *R*) [ "$(count_lines '/WORK-REPORT.md' "$TARGET/.gitignore")" = 1 ] \
-      || fail "/WORK-REPORT.md duplicated in .gitignore after reinstall" ;; esac
 
   report_combo "$label"
 }
@@ -194,18 +182,14 @@ run_env_override_test() {
 
 # --- run -----------------------------------------------------------------------------------
 echo "worktree-toolbox install-combination smoke test"
-echo "  W=worktree-per-issue  R=work-report  V=vscode-claude-tabs"
+echo "  W=worktree-per-issue  V=vscode-claude-tabs"
 [ "$HAVE_SETSID" = 1 ] || echo "  note: setsid not found — relying on the absence of a controlling terminal."
 echo ""
 
 run_combo "W        (worktree-per-issue alone)" "W"
-run_combo "R        (work-report alone)"        "R"
 run_combo "V        (vscode-claude-tabs alone)" "V"
-run_combo "W,R      (install order W -> R)"      "WR"
-run_combo "W,R      (install order R -> W)"      "RW"
-run_combo "W,V"                                  "WV"
-run_combo "R,V"                                  "RV"
-run_combo "W,R,V"                                "WRV"
+run_combo "W,V      (install order W -> V)"     "WV"
+run_combo "W,V      (install order V -> W)"     "VW"
 run_env_override_test
 
 echo ""

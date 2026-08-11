@@ -7,12 +7,16 @@ with its own one-line installer.
 | Tool | What it does | Installs |
 | --- | --- | --- |
 | [worktree-per-issue](worktree-per-issue/) | `/worktree-create` (new-or-existing) + `/worktree-heal` (heal) + `/worktree-remove` (close) slash commands, a git hook, and idempotent per-worktree provisioning | **into a target project** (`.claude/`, `scripts/`, config merges) |
-| [work-report](work-report/) | `/work-report` slash command that writes a standardized `WORK-REPORT.md` summary of the work done — in any repo, worktree or not | **into a target project** (`.claude/commands/` + a `.gitignore` entry) |
 | [vscode-claude-tabs](vscode-claude-tabs/) | a VS Code keybinding (`Ctrl+Alt+W`) that opens a `claude` editor tab per git worktree | **user-global** (`~/.claude/scripts` + your VS Code `keybindings.json`) |
 
 They complement each other but stand alone: `worktree-per-issue` creates and provisions the worktrees;
-`vscode-claude-tabs` opens a `claude` session as an editor tab for each; `work-report` leaves a readable
-summary of what a session did (handy for a coder→reviewer handoff, or resuming later). Use any alone or together.
+`vscode-claude-tabs` opens a `claude` session as an editor tab for each. Use either alone or together.
+
+**Companion: `work-report`.** The `/work-report` skill — which writes a standardized `WORK-REPORT.md`
+summary of a session's work, handy for a coder→reviewer handoff or for resuming later — now lives in
+[pilniczek/dev-skills](https://github.com/pilniczek/dev-skills/tree/master/skills/work-report) and is
+installed with [skills.sh](https://skills.sh) rather than a one-line installer from this repo. It works
+in any repo, worktree or not, so it never depended on this toolbox.
 
 ## Install
 
@@ -22,10 +26,10 @@ summary of what a session did (handy for a coder→reviewer handoff, or resuming
 curl -fsSL https://raw.githubusercontent.com/pilniczek/worktree-toolbox/main/worktree-per-issue/install.sh | sh
 ```
 
-**work-report** — run from inside the target git repo:
+**work-report** — vendor the skill into the target git repo with skills.sh:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/pilniczek/worktree-toolbox/main/work-report/install.sh | sh
+npx skills add https://github.com/pilniczek/dev-skills --skill work-report
 ```
 
 **vscode-claude-tabs** — run from inside any git repo:
@@ -34,9 +38,9 @@ curl -fsSL https://raw.githubusercontent.com/pilniczek/worktree-toolbox/main/wor
 curl -fsSL https://raw.githubusercontent.com/pilniczek/worktree-toolbox/main/vscode-claude-tabs/install.sh | sh
 ```
 
-**On Windows:** run these in **Git Bash** (not CMD or PowerShell) - it ships with
-[Git for Windows](https://git-scm.com/download/win) and provides `sh`, `curl`, and `tar`.
-In **WSL**, use your normal Linux terminal - the one-liners work as-is.
+**On Windows:** run the `curl … | sh` one-liners in **Git Bash** (not CMD or PowerShell) - it ships
+with [Git for Windows](https://git-scm.com/download/win) and provides `sh`, `curl`, and `tar`. The
+`npx` command runs anywhere. In **WSL**, use your normal Linux terminal - everything works as-is.
 
 See each tool's README for what it prompts for, requirements, and customization.
 
@@ -62,7 +66,7 @@ reflects every worktree. Then press `Ctrl+Alt+W` - no window reload needed (VS C
 
 ## Requirements
 
-- `git` for all three; `worktree-per-issue` and `vscode-claude-tabs` also need `node`; `curl` + `tar` for the hosted one-liners (on native Windows, Git Bash supplies both - no separate install needed).
+- `git` and `node` for both tools; `curl` + `tar` for the hosted one-liners (on native Windows, Git Bash supplies both - no separate install needed).
 - `vscode-claude-tabs` additionally needs VS Code with `claude` on your PATH.
 
 ## Repository layout
@@ -73,12 +77,11 @@ worktree-toolbox/
 │   ├── install.sh
 │   ├── lib/merge.cjs
 │   └── template/…
-├── work-report/            # installs the /work-report command (WORK-REPORT.md) into a project
+├── vscode-claude-tabs/     # installs the per-worktree claude-tabs keybinding generator
 │   ├── install.sh
-│   └── template/…
-└── vscode-claude-tabs/     # installs the per-worktree claude-tabs keybinding generator
-    ├── install.sh
-    └── gen-claude-tabs-keybinding.js
+│   └── gen-claude-tabs-keybinding.js
+├── test/install-matrix.sh  # install-combination smoke test (see Testing below)
+└── skills-lock.json        # skills.sh pins for the Claude skills this repo vendors
 ```
 
 Both installers accept `WORKTREE_TOOLBOX_REPO`, `WORKTREE_TOOLBOX_REF`, and `WORKTREE_TOOLBOX_SRC`
@@ -87,10 +90,11 @@ Both installers accept `WORKTREE_TOOLBOX_REPO`, `WORKTREE_TOOLBOX_REF`, and `WOR
 ## Testing
 
 `test/install-matrix.sh` is a smoke test guarding the "install any combination" promise: it
-installs each of the 7 non-empty tool combinations into throwaway git repos and asserts they don't
+installs each of the 3 non-empty tool combinations into throwaway git repos and asserts they don't
 collide (expected files land, no installer clobbers another's, `.gitignore` gets each entry once,
-`vscode-claude-tabs` stays user-global, re-runs are idempotent). It runs fully offline and
-sandboxed (never touches your real `~/.claude` or VS Code config). Needs `git` + `node`:
+`vscode-claude-tabs` stays user-global, re-runs are idempotent). A final case checks that
+`worktree-per-issue`'s non-interactive env overrides reach the templated output. It runs fully
+offline and sandboxed (never touches your real `~/.claude` or VS Code config). Needs `git` + `node`:
 
 ```sh
 sh test/install-matrix.sh

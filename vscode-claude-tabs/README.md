@@ -53,7 +53,7 @@ so changing the key removes the old one) and leaves your other keybindings untou
 
 ## Requirements
 
-- Node.js
+- `git` (the generator reads `git worktree list`) and Node.js
 - VS Code, with `claude` on your PATH
 - Works on WSL (targets the Windows-host `keybindings.json`, since keybindings are application-scoped
   and shared by the remote window), native Linux, macOS, and Windows. Under WSL the command is wrapped

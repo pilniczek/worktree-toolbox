@@ -136,7 +136,7 @@ does the setup above; in the **main checkout** it only runs `git worktree prune`
 
 If your project imports a sibling repo through a relative path (a shared library, design system, or knowledge base that
 lives next to this repo), link it in from every worktree by editing the marked block in `scripts/worktree-setup.sh`
-(`# --- project-specific sibling links (edit me) ---`). It ships commented out with a `make_junction` example. This is
+(the block under the `# --- sibling links ---` divider). It ships commented out with a `make_junction` example. This is
 intentionally not configured by the installer, because sibling layouts vary per team.
 
 ## Reporting work

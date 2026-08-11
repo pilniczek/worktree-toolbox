@@ -30,6 +30,12 @@
       "sourceType": "github",
       "skillPath": "cursor-team-kit/skills/thermo-nuclear-code-quality-review/SKILL.md",
       "computedHash": "9052b01b46b1d8dbf94c45f9313ec1983443f9a460e83d49cdc7fe0f640ca476"
+    },
+    "work-report": {
+      "source": "pilniczek/dev-skills",
+      "sourceType": "github",
+      "skillPath": "skills/work-report/SKILL.md",
+      "computedHash": "91a6ed39a45a9e675fa70df33384ee5ee7c2e5ba2ced1b8d57c323fb500f048c"
     }
   }
 }
