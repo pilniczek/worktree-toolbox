@@ -1,7 +1,7 @@
 # worktree-per-issue — AGENTS.md
 
-Tool-specific contributor notes and vocabulary for worktree-per-issue. General monorepo
-conventions (shared installer rules, how to test, ADRs) live in the [root AGENTS.md](../AGENTS.md).
+Tool-specific contributor notes and vocabulary for worktree-per-issue. Repo-wide conventions
+(installer rules, how to test, docs conventions, ADRs) live in the [root AGENTS.md](../AGENTS.md).
 
 ## Installer specifics
 
@@ -100,7 +100,7 @@ A branch name with every `/` replaced by `+`, used only as the worktree's direct
 (e.g. `feature/abc/T-1` → `feature+abc+T-1`). The branch keeps real `/` separators.
 
 **Work unit**:
-The scope one worktree (one issue / one agent run) addresses — the thing a work report covers.
+The scope one worktree (one issue / one agent run) addresses.
 
 **Provisioning step**:
 A per-worktree setup command (e.g. a codegen step) run once when a worktree is created and
