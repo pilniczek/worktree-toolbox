@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # Adds the worktree-per-issue Claude Code toolbox to a project. Run from the ROOT of the target repo:
 #   curl -fsSL https://raw.githubusercontent.com/pilniczek/worktree-toolbox/main/worktree-per-issue/install.sh | sh
-# Env overrides: see ../AGENTS.md (shared WORKTREE_TOOLBOX_*) and ./AGENTS.md (PM_INSTALL, PROVISION).
+# Env overrides (WORKTREE_TOOLBOX_*): see ../AGENTS.md.
 set -eu
 
 REPO="${WORKTREE_TOOLBOX_REPO:-pilniczek/worktree-toolbox}"
@@ -53,81 +53,31 @@ fi
 # is done in a SUBSHELL: in dash a failed redirection on a compound command is fatal to the
 # whole shell, so isolating it keeps only the subshell dying and lets us branch on its status.
 if ( : >/dev/tty ) 2>/dev/null; then INTERACTIVE=1; else INTERACTIVE=0; fi
-[ "$INTERACTIVE" = 0 ] && warn "no TTY available — using defaults, no prompts."  # NOSONAR: POSIX sh
+[ "$INTERACTIVE" = 0 ] && warn "no TTY available - no prompts, writing an empty config."  # NOSONAR: POSIX sh
 
-ask() { # ask "<prompt>" "<default>" -> echoes the answer
-  local _p="$1" _d="${2:-}" _a
-  if [ "$INTERACTIVE" = 0 ]; then printf '%s' "$_d"; return; fi  # NOSONAR: POSIX sh
-  if [ -n "$_d" ]; then printf '%s [%s]: ' "$_p" "$_d" >/dev/tty  # NOSONAR: POSIX sh
-  else printf '%s: ' "$_p" >/dev/tty; fi
+ask() { # ask "<prompt>" -> echoes the answer
+  local _a
+  printf '%s: ' "$1" >/dev/tty
   IFS= read -r _a </dev/tty || _a=""
-  [ -z "$_a" ] && _a="$_d"  # NOSONAR: POSIX sh
   printf '%s' "$_a"
   return 0
 }
 
-# --- package manager -----------------------------------------------------------------------
-PM_DEFAULT=npm
-if   [ -f pnpm-lock.yaml ]; then PM_DEFAULT=pnpm  # NOSONAR: POSIX sh
-elif [ -f yarn.lock ];      then PM_DEFAULT=yarn  # NOSONAR: POSIX sh
-elif [ -f package-lock.json ]; then PM_DEFAULT=npm  # NOSONAR: POSIX sh
-fi
-PM="$(ask "Package manager (npm/pnpm/yarn)" "$PM_DEFAULT")"
-case "$PM" in
-  npm)  PM_INSTALL="npm install" ;;
-  pnpm) PM_INSTALL="pnpm install" ;;
-  yarn) PM_INSTALL="yarn install" ;;
-  *)    PM_INSTALL="$PM install"; warn "unrecognized package manager '$PM'; using '$PM_INSTALL'." ;;
-esac
-# Escape hatch for repos whose install command isn't the PM default (e.g. 'npm run init').
-# Honored in both interactive and non-interactive runs — the only way to set it under curl | sh.
-PM_INSTALL="${WORKTREE_TOOLBOX_PM_INSTALL:-$PM_INSTALL}"
-
-# --- provisioning --------------------------------------------------------------------------
-STEPS_FILE="$(mktemp)"
-add_step() { # $1 = provisioning command — appends the guarded command to STEPS_FILE
-  local cmd="$1"
-  printf '( cd "$WT" && %s ) || echo "worktree: '\''%s'\'' failed; run it manually in the worktree." >&2\n' "$cmd" "$cmd" >> "$STEPS_FILE"
-  return 0
-}
-say ""
-say "Per-worktree provisioning commands (e.g. a codegen step). They run once when a worktree is"
-say "created, and again on '/worktree-heal' (worktree heal). Leave the command blank to finish."
-# Non-interactive escape hatch: one command per line in WORKTREE_TOOLBOX_PROVISION. Honored
-# regardless of TTY — the only way to configure provisioning steps under curl | sh. Fed via a
-# heredoc (not a pipe) so the loop runs in this shell and the steps land in STEPS_FILE.
-if [ -n "${WORKTREE_TOOLBOX_PROVISION:-}" ]; then  # NOSONAR: POSIX sh
-  say "  Preloading provisioning steps from WORKTREE_TOOLBOX_PROVISION (any interactive entries are appended):"
-  while IFS= read -r cmd; do
-    [ -z "$cmd" ] && continue  # NOSONAR: POSIX sh
-    add_step "$cmd"; say "    added: $cmd"
-  done <<EOF
-$WORKTREE_TOOLBOX_PROVISION
-EOF
-fi
-while [ "$INTERACTIVE" = 1 ]; do  # NOSONAR: POSIX sh
-  cmd="$(ask "  setup command (blank = done)" "")"
-  [ -z "$cmd" ] && break  # NOSONAR: POSIX sh
-  add_step "$cmd"; say "    added: $cmd"
-done
-[ -s "$STEPS_FILE" ] || printf '# (no provisioning steps configured)\n' > "$STEPS_FILE"  # NOSONAR: POSIX sh
-
-# --- worktreeinclude -----------------------------------------------------------------------
-INCLUDE_FILE="$(mktemp)"
-say ""
-say "Gitignored files to copy into each new worktree (e.g. .env, local settings)."
-say "Leave the path blank to finish."
-[ -f .env ] && { printf '%s\n' ".env" >> "$INCLUDE_FILE"; say "    added: .env"; }  # NOSONAR: POSIX sh
-if [ "$INTERACTIVE" = 1 ]; then  # NOSONAR: POSIX sh
-  inc_default=".claude/settings.local.json"
-  while :; do
-    entry="$(ask "  file to copy (blank = done)" "$inc_default")"
-    inc_default=""                       # default is offered on the first line only
-    [ -z "$entry" ] && break  # NOSONAR: POSIX sh
-    printf '%s\n' "$entry" >> "$INCLUDE_FILE"; say "    added: $entry"
+# --- worktree config -----------------------------------------------------------------------
+CONFIG=".claude/worktree.json"
+set --
+if [ "$INTERACTIVE" = 1 ] && [ ! -f "$CONFIG" ]; then  # NOSONAR: POSIX sh
+  say ""
+  say "Worktree setup, saved to $CONFIG. One entry per line, a blank line moves to the next key:"
+  say "  copy      paths copied into each worktree (e.g. .env)"
+  say "  hardlink  paths rebuilt from hardlinks (e.g. node_modules)"
+  say "  link      links to the main checkout (e.g. fixtures/big)"
+  say "  steps     commands run once per worktree (e.g. npm run generate)"
+  for key in copy hardlink link steps; do
+    while entry="$(ask "  $key")" && [ -n "$entry" ]; do  # NOSONAR: POSIX sh
+      set -- "$@" "$key" "$entry"
+    done
   done
-else
-  printf '%s\n' ".claude/settings.local.json" >> "$INCLUDE_FILE"
 fi
 
 # --- write files ---------------------------------------------------------------------------
@@ -155,26 +105,19 @@ done
 for s in worktree-common worktree-create worktree-heal worktree-remove; do
   install_file "$SRC/template/scripts/$s.sh"               "scripts/$s.sh"
 done
+install_file "$SRC/template/scripts/worktree-setup.cjs"    "scripts/worktree-setup.cjs"
+install_file "$SRC/template/docs/worktrees.md"             "docs/worktrees.md"
 
-GEN="$(mktemp)"
-
-# tmpl SRC DST — copy SRC to DST substituting the install-time template tokens: {{PM_INSTALL}}
-# everywhere, and {{PROVISION_STEPS}} where present (absent in docs/worktrees.md — a no-op there).
-tmpl() {
-  local src="$1" dst="$2"
-  PM_INSTALL="$PM_INSTALL" STEPS_FILE="$STEPS_FILE" node -e '
-    const fs=require("fs");
-    let s=fs.readFileSync(process.argv[1],"utf8");
-    s=s.split("{{PM_INSTALL}}").join(process.env.PM_INSTALL);
-    s=s.split("{{PROVISION_STEPS}}").join(fs.readFileSync(process.env.STEPS_FILE,"utf8").trimEnd());
-    fs.writeFileSync(process.argv[2],s);
-  ' "$src" "$dst"
-  return $?
-}
-
-tmpl "$SRC/template/scripts/worktree-setup.sh" "$GEN"; install_file "$GEN" "scripts/worktree-setup.sh"
-tmpl "$SRC/template/docs/worktrees.md"          "$GEN"; install_file "$GEN" "docs/worktrees.md"
-rm -f "$GEN"
+if [ -f "$CONFIG" ]; then  # NOSONAR: POSIX sh
+  say "  = $CONFIG (kept) - edit $CONFIG to change worktree setup"
+else
+  node "$TARGET/scripts/worktree-setup.cjs" init "$CONFIG" "$@"
+  say "  + $CONFIG"
+fi
+if ! CHECK="$(node "$TARGET/scripts/worktree-setup.cjs" check "$CONFIG" 2>&1 >/dev/null)"; then
+  warn "$CONFIG has errors. Worktree setup stops on them until you fix the file:"
+  printf '%s\n' "$CHECK" | sed 's/^/WARN: /' >&2
+fi
 
 chmod +x .husky/post-checkout scripts/worktree-*.sh 2>/dev/null || true
 
@@ -194,22 +137,13 @@ else
   say "  gitignore: added .claude/worktrees/"
 fi
 
-TMP_INC="$(mktemp)"
-{
-  printf '# Gitignored files a fresh worktree needs — copied into each new worktree by Claude Code.\n'
-  printf '# Syntax is gitignore-style. See docs/worktrees.md.\n'
-  cat "$INCLUDE_FILE"
-} > "$TMP_INC"
-install_file "$TMP_INC" ".worktreeinclude"
-rm -f "$TMP_INC" "$STEPS_FILE" "$INCLUDE_FILE"
-
 # --- husky ---------------------------------------------------------------------------------
 if [ ! -d .husky ] || ! { [ -f package.json ] && grep -q '"husky"' package.json; }; then  # NOSONAR: POSIX sh
   say ""
   warn "husky was not detected. The .husky/post-checkout hook (a convenience that provisions a"
   warn "worktree created via a bare 'git worktree add' on the CLI) only fires when husky is"
   warn "installed (core.hooksPath=.husky, plus a \"prepare\" script). This is optional: the Claude"
-  warn "/worktree-create and /worktree-heal commands run scripts/worktree-setup.sh explicitly, so provisioning"
+  warn "/worktree-create and /worktree-heal commands run scripts/worktree-setup.cjs explicitly, so provisioning"
   warn "works with or without husky."
 fi
 
@@ -219,7 +153,6 @@ say "Done. worktree-toolbox installed."
 say ""
 say "Next steps:"
 say "  1. Review the changes (git diff)."
-say "  2. Run '$PM_INSTALL' once to wire up the husky hook (if you use husky)."
-say "  3. For a sibling-repo link (shared library / knowledge base), edit the marked block in"
-say "     scripts/worktree-setup.sh — see the 'Project-specific sibling links' section of docs/worktrees.md."
+say "  2. Run your package manager's install once to wire up the husky hook (if you use husky)."
+say "  3. Edit $CONFIG to change worktree setup - see docs/worktrees.md."
 say "  4. Create a worktree from Claude Code:  /worktree-create feature/<initials>/<TICKET>/<slug>"

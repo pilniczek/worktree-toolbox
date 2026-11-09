@@ -10,5 +10,7 @@ case "$(pwd)" in */.claude/worktrees/*) ;; *) exit 0 ;; esac
 # pushed paths matching /.claude/*setup*, e.g. Azure DevOps policy VS403694; scripts/ is
 # universally safe). Resolve its root.
 repo_root="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)"
-sh "$repo_root/scripts/worktree-setup.sh"
-echo "worktree ready." >&2
+. "$repo_root/scripts/worktree-common.sh"
+if wt_setup_cjs "$repo_root" setup "$PWD"; then
+  echo "worktree ready." >&2
+fi

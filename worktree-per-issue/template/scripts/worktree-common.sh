@@ -57,6 +57,19 @@ wt_main_or_die() {
   return $?
 }
 
+# Runs the MAIN checkout $1's worktree-setup.cjs with the remaining args (e.g. setup <wt> --force),
+# so a worktree whose branch predates the toolbox install still gets the current setup and config.
+wt_setup_cjs() {
+  local main="$1"
+  shift
+  if ! command -v node >/dev/null 2>&1; then
+    wt_warn "worktree: node is required for worktree setup."
+    return 1
+  fi
+  node "$main/scripts/worktree-setup.cjs" "$@"
+  return $?
+}
+
 # Honors WT_ORIGIN_PWD so a script that re-execs itself (see worktree-remove.sh) still tests the
 # ORIGINAL location.
 wt_inside_worktree() {

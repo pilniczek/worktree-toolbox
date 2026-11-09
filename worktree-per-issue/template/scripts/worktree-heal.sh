@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
-# Heal (re-provision) a worktree: force-re-run its setup (`worktree-setup.sh --force`), which ignores
-# the run-once marker and rebuilds everything. Two modes: pass a branch name to heal that worktree,
-# or omit it to heal the current one. Full narrative: docs/worktrees.md.
+# Heal (re-provision) a worktree: force-re-run its setup (`worktree-setup.cjs setup … --force`), which ignores the
+# run-once marker: it re-runs every step and adds missing entries. Two modes: pass a branch name to
+# heal that worktree, or omit it to heal the current one. Full narrative: docs/worktrees.md.
 
 . "$(dirname "$0")/worktree-common.sh"
 MAIN="$(wt_main_or_die)" || exit 1
@@ -25,12 +25,10 @@ else
 fi
 WT="$MAIN/.claude/worktrees/$FLAT"
 
-# Run the MAIN checkout's setup with the worktree as cwd (see worktree-create.sh) — heal means
-# "rebuild with the current setup", so the latest install-templated copy is what we want.
 wt_say "Healing worktree: $WT"
-if ( cd "$WT" && sh "$MAIN/scripts/worktree-setup.sh" --force ); then
-  wt_say "Done — re-provisioned $WT (any per-step failures are reported above; re-run them manually if needed)."
+if wt_setup_cjs "$MAIN" setup "$WT" --force; then
+  wt_say "Done — re-provisioned $WT."
 else
-  wt_warn "Setup reported a failure (see above). The worktree still exists; fix the failing step and re-run /worktree-heal."
+  wt_warn "Setup reported a failure (see above). The worktree still exists; fix what it names and re-run /worktree-heal."
   exit 1
 fi

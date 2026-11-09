@@ -46,8 +46,15 @@ else
 fi
 
 # --- remove --------------------------------------------------------------------------------
+# Git for Windows deletes through a junction, emptying main's linked directory.
+if ! wt_setup_cjs "$MAIN" unlink "$WT"; then
+  wt_warn "STOP - could not drop the worktree's links, so it was not removed. Run /worktree-heal to restore any it dropped."
+  exit 1
+fi
 if ! err="$(git -C "$MAIN" worktree remove "$WT" 2>&1)"; then
-  wt_warn "STOP — could not remove the worktree (not forcing):"
+  wt_setup_cjs "$MAIN" relink "$WT" >&2 \
+    || wt_warn "warn: could not restore the worktree's links (see above); run /worktree-heal to retry."
+  wt_warn "STOP - could not remove the worktree (not forcing):"
   wt_warn "$err"
   wt_warn "Uncommitted or untracked changes in $WT:"
   git -C "$WT" status --short >&2 2>/dev/null || true

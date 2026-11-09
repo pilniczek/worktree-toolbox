@@ -34,7 +34,7 @@ fi
 if [ "$EXISTS" = 0 ]; then  # NOSONAR: POSIX sh
   # NEW branch: base it on freshly-fetched trunk, resolved (not assumed) from the remote.
   BASE="$(git -C "$MAIN" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || echo origin/main)"
-  if ! err="$(git -C "$MAIN" worktree add -b "$ARG" "$WT" "$BASE" 2>&1)"; then
+  if ! err="$(git -C "$MAIN" -c core.hooksPath=/dev/null worktree add -b "$ARG" "$WT" "$BASE" 2>&1)"; then
     wt_warn "STOP — could not create the worktree:"
     wt_warn "$err"
     exit 1
@@ -42,7 +42,7 @@ if [ "$EXISTS" = 0 ]; then  # NOSONAR: POSIX sh
   ACTION=NEW
 else
   # EXISTING branch (local or remote; a remote-only branch makes git DWIM a tracking branch).
-  if ! err="$(git -C "$MAIN" worktree add "$WT" "$ARG" 2>&1)"; then
+  if ! err="$(git -C "$MAIN" -c core.hooksPath=/dev/null worktree add "$WT" "$ARG" 2>&1)"; then
     wt_warn "STOP — could not create the worktree (is the branch already checked out elsewhere?):"
     wt_warn "$err"
     exit 1
@@ -50,10 +50,7 @@ else
   ACTION=EXISTING
 fi
 
-# Provision by running the MAIN checkout's setup script with the worktree as cwd — so it works even
-# when the branch predates the toolbox install, and always uses the latest install-templated copy
-# (setup.sh keys off pwd + git-common-dir, not off its own location). Idempotent, marker-guarded.
-( cd "$WT" && sh "$MAIN/scripts/worktree-setup.sh" ) || wt_warn "warn: provisioning reported a failure (see above); the worktree still exists."
+wt_setup_cjs "$MAIN" setup "$WT" || wt_warn "warn: provisioning reported a failure (see above); the worktree still exists."
 
 # The WORKTREE_PATH line is machine-read by the caller to EnterWorktree.
 wt_say "WORKTREE_PATH=$WT"

@@ -6,6 +6,6 @@ allowed-tools: Bash(sh scripts/worktree-heal.sh*)
 
 Run `sh scripts/worktree-heal.sh $ARGUMENTS` and relay its output to me verbatim.
 
-The script locates the worktree (from `$ARGUMENTS` if given, otherwise the current one) and force-re-runs `scripts/worktree-setup.sh --force` inside it, rebuilding everything and ignoring the run-once marker. Individual provisioning-step failures are reported but do not abort the rest.
+The script locates the worktree (from `$ARGUMENTS` if given, otherwise the current one) and force-re-runs `scripts/worktree-setup.cjs setup <worktree> --force`, ignoring the run-once marker: it re-runs every step and adds missing entries. A failed step or entry is reported but does not abort the rest; the script then exits non-zero.
 
 A **non-zero exit** means it stopped and printed why (not inside a worktree with no argument given, no such worktree, or setup failed). Relay that and stop. Do not run any git or setup yourself.
