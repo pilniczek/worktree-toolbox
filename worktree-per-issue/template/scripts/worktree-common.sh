@@ -42,9 +42,10 @@ wt_flat_from_path() {
 }
 
 # The first `worktree <path>` line of `git worktree list --porcelain` is always the primary
-# checkout. Space-safe.
+# checkout. Space-safe. $1 = any path inside the repo (default: the current directory).
 wt_main() {
-  git worktree list --porcelain | sed -n '1s/^worktree //p'
+  local dir="${1:-.}"
+  git -C "$dir" worktree list --porcelain | sed -n '1s/^worktree //p'
   return 0
 }
 

@@ -70,6 +70,7 @@ assert_W() {  # worktree-per-issue artifacts (installed into the target project)
   assert_file "$TARGET/.husky/post-checkout"
   assert_absent "$TARGET/scripts/worktree-setup.sh" "worktree-setup.sh should not be installed"
   assert_file "$TARGET/docs/worktrees.md"
+  assert_grep '--repo' "$TARGET/.claude/commands/worktree-create.md"
   assert_file "$TARGET/.claude/worktree.json"
   assert_file "$TARGET/scripts/worktree-setup.cjs"
   assert_absent "$TARGET/.worktreeinclude" ".worktreeinclude should not be installed"
@@ -249,11 +250,109 @@ JSON
   report_case "$label"
 }
 
+# --- other repos ---------------------------------------------------------------------------
 add_origin() {  # $1 = repo dir - bare clone beside it as origin, with origin/HEAD set.
   git clone -q --bare "$1" "$1.git" \
     && git -C "$1" remote add origin "$1.git" \
     && git -C "$1" fetch -q origin \
     && git -C "$1" remote set-head -a origin >/dev/null
+}
+
+make_repo() {  # $1 = dir (may already hold files to commit) - committed repo with a bare origin.
+  mkdir -p "$1" && git_init_repo "$1" && add_origin "$1"
+}
+
+run_repo_test() {
+  label="REPO     (create --repo: minimal mode, relative path, hand-off by config file, STOP paths)"
+  begin_case
+
+  : > .env; mkdir .claude
+  printf '{"copy":[".env"]}\n' > .claude/worktree.json
+  install_W || fail "installer (A) exited nonzero"
+  printf '%s\n' .env >> .gitignore
+  git add -A && git commit -qm install && add_origin "$TARGET" || fail "repo A setup failed"
+
+  shim="$PARENT/shim"; mkdir "$shim"
+  printf '#!/bin/sh\npwd > npm-ran\n' > "$shim/npm"; chmod +x "$shim/npm"
+  saved_path="$PATH"; PATH="$shim:$PATH"; export PATH
+
+  B="$PARENT/b repo"; mkdir "$B"; printf '{}\n' > "$B/package-lock.json"
+  make_repo "$B" || fail "repo B setup failed"
+  : > "$B/.env"
+
+  C="$PARENT/c"; mkdir "$C"; git_init_repo "$C" || fail "repo C init failed"
+  ( cd "$C" && install_W ) || fail "installer (C) exited nonzero"
+  ( cd "$C" && git add -A && git commit -qm install ) && add_origin "$C" || fail "repo C setup failed"
+
+  D="$PARENT/d"; mkdir -p "$D/scripts/worktree"
+  cat > "$D/scripts/worktree/create.sh" <<'STUB'
+pwd > "$PWD/stub-cwd"; printf '%s\n' "$1" > "$PWD/stub-arg"; printf 'WORKTREE_PATH=stub\n'
+STUB
+  make_repo "$D" || fail "repo D setup failed"
+
+  E="$PARENT/e"; mkdir -p "$E/.claude"; printf '{}\n' > "$E/.claude/worktree.json"
+  make_repo "$E" || fail "repo E setup failed"
+
+  mkdir "$PARENT/not-a-repo"
+
+  branch="feature/t/T-2/multi"; flat="feature+t+T-2+multi"
+  create() { sh scripts/worktree-create.sh "$@" >>"$LOG" 2>&1; }
+  minimal_lines() { grep -c '^MINIMAL WORKTREE:' "$LOG"; }
+
+  bwt="$B/.claude/worktrees/$flat"
+  create "$branch" --repo "$B" || fail "create --repo B exited nonzero"
+  [ -d "$bwt" ] || fail "B worktree missing"
+  [ "$(git -C "$bwt" rev-parse --abbrev-ref HEAD 2>/dev/null)" = "$branch" ] || fail "B worktree not on $branch"
+  assert_absent "$bwt/npm-ran" "package install in minimal worktree"
+  assert_grep 'MINIMAL WORKTREE:' "$LOG" "create output"
+  assert_grep "WORKTREE_PATH=$(git_path "$bwt")" "$LOG" "create output"
+  assert_absent "$bwt/.env" ".env copied into minimal worktree"
+
+  create --repo "$bwt" feature/t/T-3/other || fail "create --repo <B worktree> exited nonzero"
+  [ -d "$B/.claude/worktrees/feature+t+T-3+other" ] || fail "--repo <B worktree> did not resolve to B main"
+
+  before="$(minimal_lines)"
+  create "$branch" --repo "$C" || fail "create --repo C exited nonzero"
+  assert_grep "WORKTREE_PATH=$(git_path "$C/.claude/worktrees/$flat")" "$LOG" "create output"
+  [ "$(minimal_lines)" = "$before" ] || fail "toolbox repo C got a minimal worktree"
+
+  before="$(minimal_lines)"
+  create "$branch" --repo "$D" || fail "create --repo D exited nonzero"
+  [ "$(minimal_lines)" = "$((before + 1))" ] || fail "repo without worktree.json did not get a minimal worktree"
+  assert_absent "$D/stub-arg" "older-layout script ran"
+  [ -d "$D/.claude/worktrees/$flat" ] || fail "D worktree missing"
+
+  create "$branch" --repo "$E" && fail "--repo <config without script> did not STOP"
+  assert_grep 'no scripts/worktree-create.sh' "$LOG" "create output"
+  assert_absent "$E/.claude/worktrees/$flat" "E worktree after STOP"
+
+  git -C "$B" worktree add -q "$PARENT/stray" -b feature/t/T-4/x 2>/dev/null
+  create feature/t/T-4/x --repo "$B" && fail "branch checked out elsewhere did not STOP"
+  assert_absent "$B/.claude/worktrees/feature+t+T-4+x" "worktree dir after STOP"
+
+  create "$branch" --repo "$TARGET" && fail "--repo <A main> did not STOP"
+  git worktree add -q "$TARGET/.claude/worktrees/own" -b feature/t/T-5/own 2>/dev/null
+  create "$branch" --repo "$TARGET/.claude/worktrees/own" && fail "--repo <A worktree> did not STOP"
+  assert_absent "$TARGET/.claude/worktrees/$flat" "A worktree after --repo A STOP"
+  ( cd "$TARGET/.claude/worktrees/own" && sh scripts/worktree-create.sh feature/t/T-6/rel --repo "../b repo" ) >>"$LOG" 2>&1 \
+    || fail "relative --repo from an A worktree exited nonzero"
+  [ -d "$B/.claude/worktrees/feature+t+T-6+rel" ] || fail "relative --repo did not resolve against A main"
+  create "$branch" --repo "$PARENT/not-a-repo" && fail "--repo <not a repo> did not STOP"
+  create "$branch" --repo && fail "--repo without a path did not STOP"
+  create feature/t/T-7/twice --repo "$B" --repo "$C" && fail "a second --repo did not STOP"
+  assert_absent "$B/.claude/worktrees/feature+t+T-7+twice" "B worktree after a second --repo STOP"
+  git clone -q --bare "$B" "$PARENT/bare.git" \
+    && git -C "$PARENT/bare.git" config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*' \
+    && git -C "$PARENT/bare.git" fetch -q origin || fail "bare repo setup failed"
+  create "$branch" --repo "$PARENT/bare.git" && fail "--repo <bare repo> did not STOP"
+  assert_absent "$PARENT/bare.git/.claude" "worktree inside a bare repo"
+
+  assert_clean "create --repo"
+  st="$(git -C "$C" status --porcelain 2>&1)"
+  [ -z "$st" ] || fail "C status not clean: $(echo "$st" | tr '\n' ' ')"
+
+  PATH="$saved_path"; export PATH
+  report_case "$label"
 }
 
 run_fallback_test() {
@@ -386,6 +485,7 @@ echo ""
 
 run_install_test
 run_setup_test
+run_repo_test
 run_config_test
 run_fallback_test
 
