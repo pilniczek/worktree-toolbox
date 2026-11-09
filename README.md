@@ -1,7 +1,7 @@
 # worktree-toolbox
 
 A **worktree-per-issue** toolbox for [Claude Code](https://claude.com/claude-code), installable into
-any JavaScript/TypeScript project with a one-line installer.
+any git repo with a one-line installer.
 
 | Tool | What it does | Installs |
 | --- | --- | --- |
@@ -24,7 +24,7 @@ how to customize it.
 
 ## Requirements
 
-- `git` and `node`; `curl` + `tar` for the hosted one-liner (on native Windows, Git Bash supplies
+- `git` and `node` (18.17+ or 20.1+); `curl` + `tar` for the hosted one-liner (on native Windows, Git Bash supplies
   both - no separate install needed).
 
 ## Repository layout
@@ -47,7 +47,10 @@ The installer accepts `WORKTREE_TOOLBOX_REPO`, `WORKTREE_TOOLBOX_REF`, and `WORK
 
 `test/install-matrix.sh` is a smoke test guarding the install promise: it installs into a throwaway
 git repo and asserts the expected files land, `.gitignore` gets each entry once, and a re-run is
-idempotent. A second case checks that the non-interactive env overrides reach the templated output.
+idempotent and keeps `.claude/worktree.json`. A second case runs create → heal → remove with every
+`.claude/worktree.json` key in use, a third covers `/worktree-create --repo` (worktrees in other
+repos, see the [tool docs](worktree-per-issue/template/docs/worktrees.md#worktrees-in-other-repos)),
+a fourth checks that every config error is caught, and a fifth covers copy failures and step stdin.
 It runs fully offline and sandboxed (never touches your real `~/.claude`). Needs `git` + `node`:
 
 ```sh

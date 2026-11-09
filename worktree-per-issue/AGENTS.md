@@ -6,21 +6,22 @@ Tool-specific contributor notes and vocabulary for worktree-per-issue. Repo-wide
 ## Installer specifics
 
 Its `install.sh` adds a `warn` helper alongside the shared `say`/`die`. It is the only tool with
-**interactive prompts**, so under `curl | sh` (no TTY) it takes all defaults. These env overrides
-are the non-interactive escape hatch for those prompts:
-
-- `WORKTREE_TOOLBOX_PM_INSTALL` — the exact install command to template into
-  `worktree-setup.sh` / `docs/worktrees.md`, for repos whose command isn't the package
-  manager's default (e.g. `npm run init`, not `npm install`).
-- `WORKTREE_TOOLBOX_PROVISION` — provisioning steps, **one command per line**, for the
-  per-worktree setup the interactive loop would otherwise collect.
+**interactive prompts**, and they only build the *config file* when it is missing: free-form
+entries per key, nothing prefilled. Under `curl | sh` (no TTY) it writes an empty file. There is
+no env override: a scripted install commits `.claude/worktree.json` first, and the installer keeps
+it. Every template file is copied as-is. The installer hands its answers to
+`scripts/worktree-setup.cjs init` as `<key> <entry>` argument pairs, which writes the file. Then it
+runs the same check setup uses (`worktree-setup.cjs check`) and prints any config error as a
+warning, exit 0.
 
 ## Commands are thin wrappers over scripts
 
 The three slash commands (`.claude/commands/worktree-*.md`) carry no logic - each just runs the
 matching `template/scripts/worktree-<name>.sh` and relays its output. The branchy work (mode
 detection, validation, the flat-name rule, the `git worktree` calls) lives in the scripts, so a
-command run costs no prompt reasoning. Shared rules live once in `scripts/worktree-common.sh`,
+command run costs no prompt reasoning. Worktree setup is the exception to shell: callers run
+`scripts/worktree-setup.cjs` through `wt_setup_cjs` (checks for `node`). That node module owns the config schema (the four keys, every path rule), places the entries, runs the steps,
+and writes the marker; before removal it drops the link entries (`unlink`) and puts them back if git refuses (`relink`). Shared rules live once in `scripts/worktree-common.sh`,
 sourced by all three - edit a shared rule **there**. When you change behavior, edit the script (and
 its `docs/worktree-<name>.md`), not the command file.
 
@@ -48,12 +49,15 @@ silently break on Linux - two confirmed gotchas that bit this repo:
    names, `$err` from git, paths). Use the `wt_say` / `wt_warn` helpers in `worktree-common.sh`
    (both `printf '%s\n'`), identical on both shells.
 2. **A redirect failure on a POSIX *special builtin* (`:`) exits non-interactive dash even with
-   `|| true`** (bash keeps going). `: > "$MARKER"` aborted `worktree-setup.sh` when `node_modules`
-   was absent. Guard the whole thing instead: `[ -d "$WT/node_modules" ] && { : > "$MARKER" …; }`.
+   `|| true`** (bash keeps going). `: > "$MARKER"` aborts the script when the marker's directory is
+   absent. Guard the whole thing instead:
+   `if [ -d "$DIR" ]; then : > "$MARKER" …; fi`. Not `[ -d … ] && { … }`: as a script's last
+   command under `set -e`, its false test becomes the exit status, so the script reports failure
+   whenever the directory is absent.
 
 Before shipping a script change, lint with **`dash -n` AND `bash -n`**, and run the full
-create → heal → remove lifecycle forced through **both** shells (the repo-wide `install-matrix.sh`
-does not cover this runtime lifecycle).
+create → heal → remove lifecycle forced through **both** shells (`TEST_SH=dash` and `TEST_SH=bash`
+runs of the repo-wide `install-matrix.sh`; see its known gap in the [root AGENTS.md](../AGENTS.md)).
 
 SonarQube (`shelldre:S7688`) flags every `[ … ]` test and suggests `[[ … ]]`. That is a **bash
 keyword dash does not have** (`[[: not found`), so switching would break Linux. We keep POSIX `[ … ]`
@@ -102,13 +106,27 @@ A branch name with every `/` replaced by `+`, used only as the worktree's direct
 **Work unit**:
 The scope one worktree (one issue / one agent run) addresses.
 
+**Config file**:
+`.claude/worktree.json` in the main checkout, committed. Holds every per-worktree setup choice in
+four keys: `copy`, `hardlink`, `link`, `steps`. Read by `scripts/worktree-setup.cjs`, which
+validates it and does the setup.
+
+**Copy / hardlink / link mode**:
+How an entry `<path>` becomes `<worktree>/<path>` from `<main>/<path>`. *Copy*: a real copy.
+*Hardlink*: its own dir tree with hardlinked files, falling back to copy. *Link*: a symlink, or a
+junction on Windows.
+
 **Provisioning step**:
-A per-worktree setup command (e.g. a codegen step) run once when a worktree is created and
-again on `/worktree-heal`. Configured interactively during install, or non-interactively via
-`WORKTREE_TOOLBOX_PROVISION` (one command per line). Distinct from the *install command*
-(`WORKTREE_TOOLBOX_PM_INSTALL`), which only wires up the husky hook.
+A command in the config file's `steps`, run once when a worktree is created and again on
+`/worktree-heal`.
+
+**Minimal worktree**:
+A worktree that `worktree-create.sh <branch> --repo <path>` makes in another repo that has no
+worktree toolbox (no *config file*): `git worktree add` and nothing more - no package install, no
+setup. It never reads this repo's config file and gets no heal or remove; the user removes it by
+hand.
 
 **Non-interactive install**:
 Running an `install.sh` with no controlling TTY (the `curl | sh` path). The installer detects
-this (`( : >/dev/tty )`), skips all prompts, and takes defaults — so any non-default choice
-must come from an env override.
+this (`( : >/dev/tty )`), skips all prompts, and writes an empty config file - so any entry must
+come from a committed config file.

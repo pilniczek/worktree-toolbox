@@ -1,7 +1,7 @@
 # worktree-per-issue
 
-A one-line installer that adds a **worktree-per-issue** toolbox to any
-JavaScript/TypeScript project run with [Claude Code](https://claude.com/claude-code).
+A one-line installer that adds a **worktree-per-issue** toolbox to any git repo run with
+[Claude Code](https://claude.com/claude-code).
 
 > Part of [worktree-toolbox](../README.md). Installs INTO a target project.
 
@@ -21,7 +21,7 @@ installer drops into your project.
 | Command | Does | Docs |
 | --- | --- | --- |
 | `/worktree-create` | create a worktree for a branch (new **or** existing) and move you into it | [docs/worktree-create.md](docs/worktree-create.md) |
-| `/worktree-heal` | rebuild a broken or stale worktree's setup in place | [docs/worktree-heal.md](docs/worktree-heal.md) |
+| `/worktree-heal` | re-run a worktree's setup steps and add missing entries | [docs/worktree-heal.md](docs/worktree-heal.md) |
 | `/worktree-remove` | close a worktree and, if safe, delete its branch | [docs/worktree-remove.md](docs/worktree-remove.md) |
 
 ## Install
@@ -46,9 +46,9 @@ nothing twice.
 | `.husky/post-checkout` | convenience hook: runs the setup script on a bare-CLI `git worktree add` |
 | `scripts/worktree-create.sh`, `worktree-heal.sh`, `worktree-remove.sh` | the command logic (mode detection, validation, the git worktree calls) — keeps each command off Claude's token budget |
 | `scripts/worktree-common.sh` | shared rules (branch-name validation, the flat-name rule, find-main) sourced by the three scripts |
-| `scripts/worktree-setup.sh` | per-worktree setup (`node_modules`, your setup steps, `.worktreeinclude` config) |
+| `scripts/worktree-setup.cjs` | per-worktree setup, driven by `.claude/worktree.json`: checks the file, places entries, runs steps |
 | `docs/worktrees.md` | full documentation of the flow |
-| `.worktreeinclude` | the gitignored local files copied into each worktree — generated from your answers, so a re-run replaces it (review with `git diff`) |
+| `.claude/worktree.json` | what each worktree gets: paths to copy, hardlink or link, and setup steps - written from your answers only when missing, never changed after that |
 
 It also merges into these files without overwriting:
 
@@ -60,11 +60,14 @@ It also merges into these files without overwriting:
 
 ## What it asks
 
-1. **Package manager** — auto-detected from your lockfile; confirm or override.
-2. **Per-worktree setup commands** — zero or more commands (e.g. `npm run generate`).
-   They run once when a worktree is created, and again on `/worktree-heal`.
-3. **`.worktreeinclude` entries** — zero or more gitignored files to copy into each new
-   worktree (env files, `.claude/settings.local.json`, …), entered one path per line.
+Only when `.claude/worktree.json` does not exist yet. If it exists, the installer keeps it and
+asks nothing. Nothing is prefilled: for each key you type one entry per line, and a blank line
+moves to the next key. The keys are described under
+[What the automatic setup does](#what-the-automatic-setup-does); the file's shape is in
+[docs/worktrees.md](template/docs/worktrees.md#what-the-automatic-setup-does).
+
+Without a terminal (`curl | sh`) it writes an empty file. Edit the file later for more entries; to
+script an install, commit `.claude/worktree.json` before you run the installer.
 
 ## How it's wired (big picture)
 
@@ -73,6 +76,8 @@ replaces git - it's only config and a setup script on top of git's built-in work
 
 - **Create** with `/worktree-create` from your primary checkout: creates or checks out the branch,
   moves you in, and runs setup. See [docs/worktree-create.md](docs/worktree-create.md).
+  Add `--repo <path>` when the work also needs a worktree in another repo - see
+  [Worktrees in other repos](template/docs/worktrees.md#worktrees-in-other-repos).
 - **Heal** a broken worktree with `/worktree-heal`, which re-runs setup with
   `--force`. See [docs/worktree-heal.md](docs/worktree-heal.md).
 - **Close** with `/worktree-remove`, which removes the worktree and deletes the branch only if it's
@@ -84,36 +89,30 @@ don't need to step back to main first.
 
 ### What the automatic setup does
 
-Once the worktree exists, `scripts/worktree-setup.sh` sets it up - called by
+Once the worktree exists, `scripts/worktree-setup.cjs` sets it up with `node` - called by
 `/worktree-create`, or by `.husky/post-checkout` on a bare-CLI `git worktree add`.
-It's safe to re-run: a run-once marker under `node_modules/.wt-provisioned` makes a
-repeat trigger do nothing, and `/worktree-heal` passes `--force` to rebuild anyway.
+It reads `.claude/worktree.json` and is safe to re-run: it never overwrites what the worktree
+already has.
 
-- **`node_modules`** is a hardlink-copy of the main checkout's install - a real directory whose
-  files share inodes with main, so it's near-instant and adds almost no disk. If a branch needs
-  different deps, run your package manager's install inside the worktree; it isolates automatically
-  (packages are swapped by atomic rename, so main is never touched). Falls back to a full copy
-  (cross-filesystem / Windows), then a real install.
-- **Your setup steps** (configured at install time, e.g. `npm run generate`) run once.
-- **`.worktreeinclude` config** - the gitignored files you listed are copied from the
-  main checkout. Plain `git worktree add` doesn't do this, so the script does.
+- **copy** entries are copied from the main checkout (`.env`, local settings).
+- **hardlink** entries get their own dir tree with hardlinked files. For `node_modules` that is
+  near-instant and adds almost no disk; an install inside the worktree isolates it, main is never
+  touched. Falls back to a copy when hardlinks are not supported (e.g. another filesystem).
+- **link** entries point to the main checkout's path.
+- **steps** run once per worktree (a marker in the worktree's git dir records it);
+  `/worktree-heal` passes `--force` to run them again.
 
-## Not configured for you
-
-**Sibling-repo links.** If your project imports a sibling repo through a relative
-path (a shared library, design system, or knowledge base next to your repo), wire it
-up by editing the clearly-marked block in `scripts/worktree-setup.sh`. It ships
-commented out with a working `make_junction` example. Layouts vary too much per team
-to guess.
+A config error stops setup before it creates anything and names the entry to fix. Full rules:
+[What the automatic setup does](template/docs/worktrees.md#what-the-automatic-setup-does).
 
 ## Requirements
 
-- `git`, `node`, and (for the hosted one-liner) `curl` + `tar`.
-- Cross-platform: the setup script makes symlinks on Unix/macOS and NTFS junctions on
+- `git`, `node` (18.17+ or 20.1+), and (for the hosted one-liner) `curl` + `tar`.
+- Cross-platform: setup makes symlinks on Unix/macOS and NTFS junctions on
   native Windows (Git Bash / MSYS / Cygwin).
 - **husky** is optional. Without it, the `post-checkout` hook (which covers a bare
   `git worktree add` from the CLI) won't fire — but the `/worktree-create` and
-  `/worktree-heal` commands run `scripts/worktree-setup.sh` directly, so setup works
+  `/worktree-heal` commands run `scripts/worktree-setup.cjs` directly, so setup works
   either way.
 
 ## Local development / testing

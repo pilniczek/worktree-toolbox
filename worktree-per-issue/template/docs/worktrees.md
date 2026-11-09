@@ -19,12 +19,12 @@ Worktrees live under `.claude/worktrees/<flat>/` (gitignored).
 ## Setup (once per clone)
 
 ```sh
-{{PM_INSTALL}}            # connects the husky post-checkout hook
+npm install             # or your package manager's install; connects the husky post-checkout hook
 ```
 
-That is the whole setup. The commands, the hook, `scripts/worktree-setup.sh`, and `.worktreeinclude` are all committed,
-so they work right after you clone. `{{PM_INSTALL}}` only wires the `post-checkout` git hook — a convenience for a
-bare-CLI `git worktree add`. It is optional: the Claude `/worktree-create` and `/worktree-heal` commands run `scripts/worktree-setup.sh`
+That is the whole setup. The commands, the hook, the scripts, and `.claude/worktree.json` are all committed,
+so they work right after you clone. The install only wires the `post-checkout` git hook — a convenience for a
+bare-CLI `git worktree add`. It is optional: the Claude `/worktree-create` and `/worktree-heal` commands run `scripts/worktree-setup.cjs`
 explicitly, so provisioning works with or without husky.
 
 ## Creating a worktree: `/worktree-create`
@@ -76,18 +76,17 @@ flowchart TD
   exists -->|"yes"| checkout["git worktree add … &lt;name&gt;<br/>(check out EXISTING; remote-only → tracking branch)"]
   createnew --> setup
   checkout --> setup
-  setup["sh scripts/worktree-setup.sh<br/>(the script provisions the worktree; idempotent, marker-guarded)"]
-  setup --> nm["node_modules<br/>(hardlink-copy of main's install — shared inodes, ~instant)"]
-  nm --> steps["provisioning steps<br/>(your configured commands, e.g. codegen — run once)"]
-  steps --> cfg[".worktreeinclude<br/>(copy gitignored local config from main)"]
-  cfg --> report["Report NEW vs EXISTING + print WORKTREE_PATH<br/>(the loud after-the-fact safety net)"]
+  setup["node scripts/worktree-setup.cjs setup &lt;worktree&gt;<br/>(the script provisions the worktree; idempotent, marker-guarded)"]
+  setup --> nm["copy / hardlink / link entries<br/>(from .claude/worktree.json - existing targets left alone)"]
+  nm --> steps["steps<br/>(your configured commands, e.g. codegen - run once)"]
+  steps --> report["Report NEW vs EXISTING + print WORKTREE_PATH<br/>(the loud after-the-fact safety net)"]
   report --> enter["EnterWorktree (by path)<br/>(the command moves THIS session in — and stay)"]
   enter --> ready(["Ready — you're now working inside the worktree"])
 
   classDef step fill:#eaeaea,stroke:#888,color:#000;
   classDef newc fill:#fff3cd,stroke:#e0a800,color:#000;
   classDef oldc fill:#cfe2ff,stroke:#3d7bd6,color:#000;
-  class start,validate,fetch,prune,exists,setup,nm,steps,cfg,report,enter,ready step;
+  class start,validate,fetch,prune,exists,setup,nm,steps,report,enter,ready step;
   class createnew newc;
   class checkout oldc;
 ```
@@ -104,40 +103,105 @@ flowchart TD
   hasarg -->|"yes"| locate["Validate + derive flat name<br/>(confirm .claude/worktrees/&lt;flat&gt; is live — else STOP)"]
   hasarg -->|"no"| current["Target the CURRENT worktree<br/>(pwd must be inside one — else STOP and ask)"]
   locate --> heal
-  current --> heal["( cd &lt;worktree&gt; && sh scripts/worktree-setup.sh --force )<br/>(run setup from inside it — no session move; ignore the run-once marker)"]
-  heal --> nm["Relink node_modules<br/>(only if missing)"]
-  nm --> steps["Re-run ALL provisioning steps<br/>(e.g. codegen — regardless of the marker)"]
-  steps --> cfg["Copy any missing .worktreeinclude config"]
-  cfg --> report(["Report what was rebuilt"])
+  current --> heal["node scripts/worktree-setup.cjs setup &lt;worktree&gt; --force<br/>(no session move; ignore the run-once marker)"]
+  heal --> nm["Recreate missing copy / hardlink / link entries"]
+  nm --> steps["Re-run ALL steps<br/>(e.g. codegen - regardless of the marker)"]
+  steps --> report(["Report the result"])
 
   classDef step fill:#eaeaea,stroke:#888,color:#000;
-  class start,hasarg,locate,current,heal,nm,steps,cfg,report step;
+  class start,hasarg,locate,current,heal,nm,steps,report step;
 ```
 
 ## What the automatic setup does
 
-Once the worktree exists on disk, `scripts/worktree-setup.sh` provisions it — from `/worktree-create`'s **Provision** step, or from
-`.husky/post-checkout` on a bare-CLI `git worktree add`. It is idempotent (a fast no-op once provisioned):
+Once the worktree exists on disk, `scripts/worktree-setup.cjs` sets it up - from `/worktree-create`, or from
+`.husky/post-checkout` on a bare-CLI `git worktree add`. Everything it does comes from one committed file,
+`.claude/worktree.json` in the main checkout:
 
-- **`node_modules`** is a hardlink-copy of the main checkout's install: a real directory whose files share inodes with
-  main, so it is near-instant and adds almost no disk. If a branch needs different dependencies, run `{{PM_INSTALL}}`
-  inside the worktree — it isolates automatically (packages are replaced by atomic rename, so the main tree is never
-  mutated). Falls back to a full copy (cross-filesystem / Windows), then a real install.
-- **Configured provisioning steps** run next — the commands you chose at install time (e.g. a codegen step). They run
-  once: a marker (`node_modules/.wt-provisioned`) records that the worktree is provisioned, so a repeat trigger is a
-  no-op. `/worktree-heal` passes `--force` to re-run them regardless.
-- **`.worktreeinclude` config** — the gitignored files you listed are copied from the main checkout into the worktree.
-  Plain `git worktree add` does **not** honor Claude's `.worktreeinclude`, so the script does the copy itself.
+```json
+{
+  "copy":     [".env", ".claude/settings.local.json"],
+  "hardlink": ["node_modules"],
+  "link":     ["fixtures/big-dataset"],
+  "steps":    ["npm run generate"]
+}
+```
 
-**Triggers.** `.husky/post-checkout` fires on `git worktree add`. The script is guarded by location: inside a worktree it
-does the setup above; in the **main checkout** it only runs `git worktree prune`.
+Each key is optional. For an entry `<path>`, setup creates `<worktree>/<path>` from `<main>/<path>`:
 
-### Project-specific sibling links
+| Key | Creates | Use it for |
+| --- | --- | --- |
+| `copy` | a real copy (copy-on-write where the filesystem supports it) | small gitignored files the worktree may change on its own: `.env`, local settings |
+| `hardlink` | its own directory tree whose files are hardlinks to main's (falls back to `copy` when hardlinks are not supported, e.g. on another filesystem) | big trees that are replaced, not edited in place: `node_modules` |
+| `link` | a symlink to main's path (a junction on Windows; a file there falls back to `copy`) | big data every worktree shares read-only |
+| `steps` | nothing - each command runs in the worktree | codegen, or an install when main has no `node_modules` |
 
-If your project imports a sibling repo through a relative path (a shared library, design system, or knowledge base that
-lives next to this repo), link it in from every worktree by editing the marked block in `scripts/worktree-setup.sh`
-(the block under the `# --- sibling links ---` divider). It ships commented out with a `make_junction` example. This is
-intentionally not configured by the installer, because sibling layouts vary per team.
+`node_modules` is an ordinary `hardlink` entry. Its files share inodes with main, so it is near-instant and adds almost
+no disk. A later install inside the worktree isolates it: the package manager replaces packages by atomic rename, so
+main is never changed.
+
+**Rules.**
+
+- Paths are literal (no globs), relative to the repo root, use `/` as the separator (never `\`), and have no `.` or
+  `..` segments.
+- No path may overlap another, in the same or a different key (`fixtures` and `fixtures/a.json` clash). Paths in or
+  around `.git` and `.claude/worktrees` are refused. Both checks ignore case, so `Fixtures` clashes with `fixtures`
+  too (Windows and macOS file systems ignore case).
+- Gitignore every `copy`, `hardlink` and `link` target in this repo. Git sees an unignored target as an untracked file
+  in the worktree, and a commit there picks it up.
+- A `hardlink` entry that is a single file is the same file as main's. An editor that saves in place changes main too.
+  Use `copy` for a file the worktree edits.
+- A target that already exists (even a broken link) is left alone. A missing source prints a warning and is skipped.
+- Entries are placed on every run. Steps run once per worktree: a marker in the worktree's git dir
+  (`$(git rev-parse --git-dir)/wt-provisioned`) records that they ran, even when a step failed (each failure prints a
+  warning). `/worktree-heal` passes `--force` to run them again.
+- A failed step or entry does not stop the rest, but setup then exits non-zero, so `/worktree-create` and
+  `/worktree-heal` report it.
+- Any config error (invalid JSON, unknown key, a value that is not an array of strings, a path rule above) stops setup
+  before it creates anything. The message names each bad entry and the file to fix; then run `/worktree-heal`.
+- No `.claude/worktree.json` means no setup: one warning, nothing else.
+
+The installer writes the file from your answers only when it is missing and never changes it after that - edit it by hand.
+
+**Triggers.** `.husky/post-checkout` fires on a bare-CLI `git worktree add` and runs the setup only inside
+`.claude/worktrees/`. `/worktree-create` runs `git worktree add` with hooks off (`-c core.hooksPath=/dev/null`) and
+runs the setup itself, so the setup runs once and its output and warnings stay visible.
+
+## Worktrees in other repos
+
+Some features also need changes in other repos (a shared library, a backend). Create the worktree there with the same
+branch:
+
+```text
+/worktree-create feature/abc/TICKET-123/some-slug --repo ../other-repo
+```
+
+One `--repo` per call. For several repos, run the command once per repo; a second `--repo` stops with a usage error.
+
+The worktree lands at `<other-repo>/.claude/worktrees/<flat>`: same branch, same flat name. Your session stays here
+(no `EnterWorktree`) and works in the other repo by path. A relative `--repo` path resolves against this repo's main
+checkout, so `../other-repo` works the same from main and from any worktree. It may point anywhere inside the other
+repo, even one of its worktrees; the script finds its main checkout. Pointing it at this repo stops with a hint to drop
+`--repo`; pointing it at a bare repo stops too.
+
+Never run a bare `git worktree add` in another repo. A worktree at a sibling path such as `../other-repo-T-1` later
+blocks the right one with `fatal: '<branch>' is already used by worktree at ...`.
+
+| Other repo | Created by | Setup | Later lifecycle |
+| --- | --- | --- | --- |
+| has the toolbox (`.claude/worktree.json`) | the other repo, by its own rules: its `scripts/worktree-create.sh`, run from its main checkout | full, its own config | its toolbox |
+| no toolbox, or an older one without `.claude/worktree.json` | this repo's script takes over, minimal mode | none | you, by hand |
+| `.claude/worktree.json` but no `scripts/worktree-create.sh` | nobody: STOP with a hint to reinstall the toolbox there | - | - |
+
+A **minimal worktree** gets the same fetch, prune, and new-or-existing branch handling as here, and no setup at all: no
+package install, nothing from this repo's `.claude/worktree.json`. Nothing else is written to the other
+repo either - if it does not gitignore `.claude/worktrees/`, its main checkout shows that folder as untracked. The output
+ends with a `MINIMAL WORKTREE:` notice and the exact `git -C <other-main> worktree remove <worktree>` command, because
+`/worktree-heal` and `/worktree-remove` here do not handle worktrees in other repos.
+
+Any failure stops with git's message (e.g. the branch is already checked out elsewhere in that repo). Linking the repos
+together (yalc, `file:` deps, workspaces) is up to you or project scripts. yalc caveat: its store (`~/.yalc`) is global,
+so two features that publish the same package version overwrite each other.
 
 ## Reporting work
 
@@ -174,7 +238,7 @@ flowchart TD
   inside -->|"no"| stopA["STOP — nothing to close here<br/>(use /worktree-remove &lt;branch&gt; from main)"]
   inside -->|"yes"| capture["Capture flat + branch from pwd"]
   capture --> findmain["Find main checkout &lt;main&gt;<br/>(first entry of git worktree list)"]
-  findmain --> removedir["git -C &lt;main&gt; worktree remove &lt;main&gt;/.claude/worktrees/&lt;flat&gt;<br/>(refuses if the working tree is dirty)"]
+  findmain --> removedir["worktree-setup.cjs unlink: drop the worktree's own link entries<br/>git -C &lt;main&gt; worktree remove &lt;main&gt;/.claude/worktrees/&lt;flat&gt;<br/>(refuses if the working tree is dirty; then the links are put back)"]
 
   subgraph shared["shared tail — reused by /worktree-remove &lt;branch&gt;"]
     direction TB
@@ -206,7 +270,7 @@ flowchart TD
   start --> validate["Validate the branch name + derive flat<br/>(must be a valid git branch name)"]
   validate --> live{"A live worktree?<br/>(shows in git worktree list)"}
   live -->|"no"| stopB["STOP — not a live worktree"]
-  live -->|"yes"| removedir["git -C &lt;main&gt; worktree remove &lt;main&gt;/.claude/worktrees/&lt;flat&gt;"]
+  live -->|"yes"| removedir["worktree-setup.cjs unlink, then<br/>git -C &lt;main&gt; worktree remove &lt;main&gt;/.claude/worktrees/&lt;flat&gt;"]
   removedir --> rest["Continue in the shared tail of /worktree-remove above<br/>(clean? → git branch -d → merged? → prune → report)"]
 
   classDef step fill:#eaeaea,stroke:#888,color:#000;
@@ -225,10 +289,15 @@ branch. So a folder deleted by hand clears its stale `git worktree list` entry n
 
 ```sh
 git worktree list                                  # review worktrees + their branches
+node scripts/worktree-setup.cjs unlink .claude/worktrees/<flat>   # drop its link entries first (see below)
 git worktree remove .claude/worktrees/<flat>       # drop a finished worktree's dir (refuses if dirty)
 git branch --merged main                           # branches fully merged into trunk — safe to delete
 git branch -d feature/<initials>/<TICKET>/<slug>   # -d refuses to delete anything unmerged
 ```
+
+On Windows, Git deletes through a junction: a bare `git worktree remove` on a worktree that still holds a `link` entry
+such as `fixtures/big` empties that directory in main. `unlink` drops the worktree's links;
+`/worktree-remove` runs it for you and, if the removal stops, puts them back with `relink`.
 
 Use `git worktree remove --force` only when the uncommitted changes can be thrown away, and `git branch -D` only for an
 unmerged branch you know you do not need.
@@ -249,7 +318,8 @@ the new worktree.
 ### Shell style: POSIX `sh` (runs on Linux and Windows)
 
 The `scripts/worktree-*.sh` files are plain POSIX shell, so the **same** file runs under `dash`
-(Linux `/bin/sh`) and `bash` (Windows Git Bash). Two things follow, worth knowing before you edit:
+(Linux `/bin/sh`) and `bash` (Windows Git Bash). Setup itself is `scripts/worktree-setup.cjs`, plain
+Node with built-in modules only. Two things follow for the shell files, worth knowing before you edit:
 
 - **They use the older `[ … ]` test, not `[[ … ]]`.** `[[` is a bash keyword that dash does not
   have, so it would break the scripts on Linux. If a code scanner (e.g. SonarQube rule S7688) tells

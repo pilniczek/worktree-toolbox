@@ -10,6 +10,10 @@ it, then prints `WORKTREE_PATH=<path>`. The one part a script can't do — reloc
 session into the worktree — stays with Claude: the command reads that path and calls
 `EnterWorktree`.
 
+With `--repo <path>` it creates the same-named worktree in another repo instead and does not
+move the session. See
+[Worktrees in other repos](../template/docs/worktrees.md#worktrees-in-other-repos).
+
 ## Flow
 
 ```mermaid
@@ -23,18 +27,17 @@ flowchart TD
   exists -->|"yes"| checkout["git worktree add … &lt;name&gt;<br/>(check out EXISTING; remote-only → tracking branch)"]
   createnew --> setup
   checkout --> setup
-  setup["sh scripts/worktree-setup.sh<br/>(the script provisions the worktree; idempotent, marker-guarded)"]
-  setup --> nm["node_modules<br/>(hardlink-copy of main's install — shared inodes, ~instant)"]
-  nm --> steps["provisioning steps<br/>(your configured commands, e.g. codegen — run once)"]
-  steps --> cfg[".worktreeinclude<br/>(copy gitignored local config from main)"]
-  cfg --> report["Report NEW vs EXISTING + print WORKTREE_PATH<br/>(the loud after-the-fact safety net)"]
+  setup["node scripts/worktree-setup.cjs setup &lt;worktree&gt;<br/>(the script provisions the worktree; idempotent, marker-guarded)"]
+  setup --> nm["copy / hardlink / link entries<br/>(from .claude/worktree.json - existing targets left alone)"]
+  nm --> steps["steps<br/>(your configured commands, e.g. codegen - run once)"]
+  steps --> report["Report NEW vs EXISTING + print WORKTREE_PATH<br/>(the loud after-the-fact safety net)"]
   report --> enter["EnterWorktree (by path)<br/>(the command moves THIS session in — and stay)"]
   enter --> ready(["Ready — you're now working inside the worktree"])
 
   classDef step fill:#eaeaea,stroke:#888,color:#000;
   classDef newc fill:#fff3cd,stroke:#e0a800,color:#000;
   classDef oldc fill:#cfe2ff,stroke:#3d7bd6,color:#000;
-  class start,validate,fetch,prune,exists,setup,nm,steps,cfg,report,enter,ready step;
+  class start,validate,fetch,prune,exists,setup,nm,steps,report,enter,ready step;
   class createnew newc;
   class checkout oldc;
 ```

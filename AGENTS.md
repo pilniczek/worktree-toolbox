@@ -14,7 +14,7 @@ Integration recipes that assume a companion belong **only** in the [root README]
 ## Tool notes
 
 [worktree-per-issue/AGENTS.md](worktree-per-issue/AGENTS.md) holds the tool's vocabulary and its
-contributor notes (interactive prompts and their env overrides, the thin-command/scripts split,
+contributor notes (interactive prompts, the thin-command/scripts split,
 dash-safety rules, shell function conventions) — read it before touching anything in that folder.
 
 Two tools were **removed from this repo** and now live elsewhere; don't re-add a copy or an installer
@@ -61,15 +61,29 @@ WORKTREE_TOOLBOX_SRC=/path/to/worktree-toolbox/worktree-per-issue sh /path/to/wo
 The first run should install the expected artifacts; the second should report them `= … (unchanged)`
 (idempotency).
 
-`test/install-matrix.sh` automates that: one case for install + reinstall, plus one asserting the
-non-interactive env overrides (`WORKTREE_TOOLBOX_PM_INSTALL` / `_PROVISION`) reach the templated
-output. It is fully **offline** and **sandboxed** (`HOME` and `INSTALL_DIR` are redirected to temp
-dirs, so your real `~/.claude` is never touched). Requires `git`, `node`, `sh`.
+`test/install-matrix.sh` automates that: one case for install + reinstall (empty
+`.claude/worktree.json`, kept on reinstall), one that runs the create → heal → remove lifecycle (husky hook active) with
+every config key against a local bare `origin` and asserts `git status --porcelain` stays empty, one
+for `worktree-create.sh --repo` (minimal mode, a relative path resolved from a worktree, hand-off
+detected by `.claude/worktree.json`, and the STOP paths), one for config errors (`check`, setup,
+and installer), and one for copy behavior (a dir copy, a failed copy leaves no partial target) and a
+step that reads stdin. It is fully **offline** and
+**sandboxed** (`HOME` and `INSTALL_DIR` are redirected to temp dirs, so your real `~/.claude` is
+never touched). Requires `git`, `node`, `sh`.
 
-**Known gap:** the matrix covers install and idempotency only, never runtime behavior. The
-create→heal→remove worktree lifecycle is untested - a portability bug once shipped through this gap.
-When you change any `scripts/worktree-*.sh`, self-verify the lifecycle by hand (the dash/bash matrix
-is in [worktree-per-issue/AGENTS.md](worktree-per-issue/AGENTS.md)).
+`TEST_SH=<shell>` puts that shell first on `PATH` as `sh`, so the installer and every nested
+`sh <script>` call run under it. Run the matrix once per POSIX shell on the machine:
+
+```sh
+TEST_SH=dash dash test/install-matrix.sh
+TEST_SH=bash bash test/install-matrix.sh
+```
+
+**Windows:** Git for Windows deletes through a junction, so `worktree-remove.sh` runs `worktree-setup.cjs unlink`
+before `git worktree remove`; a Linux run cannot catch a regression there. When you change setup or removal, run the
+matrix in Git Bash too (from WSL: `"/mnt/c/Program Files/Git/bin/bash.exe" -lc 'sh test/install-matrix.sh'` in a copy
+on the Windows filesystem). Assertions on paths that git or node print go through `git_path` / `node_path`, which
+convert to the `C:/...` / `C:\...` form there.
 
 ## Comment & docs conventions
 

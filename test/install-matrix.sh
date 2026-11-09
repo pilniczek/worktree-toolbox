@@ -71,9 +71,11 @@ assert_W() {  # worktree-per-issue artifacts (installed into the target project)
   assert_absent "$TARGET/scripts/worktree-setup.sh" "worktree-setup.sh should not be installed"
   assert_file "$TARGET/docs/worktrees.md"
   assert_grep '--repo' "$TARGET/.claude/commands/worktree-create.md"
+  assert_grep 'Worktrees in other repos' "$TARGET/docs/worktrees.md"
   assert_file "$TARGET/.claude/worktree.json"
   assert_file "$TARGET/scripts/worktree-setup.cjs"
   assert_absent "$TARGET/.worktreeinclude" ".worktreeinclude should not be installed"
+  grep -qF '{{' "$TARGET/docs/worktrees.md" && fail "template token left in docs/worktrees.md"
   assert_grep 'Bash(git worktree *)'  "$TARGET/.claude/settings.json"   # kept for manual use
   assert_grep 'git.detectWorktrees'   "$TARGET/.vscode/settings.json"
   [ "$(count_lines '.claude/worktrees/' "$TARGET/.gitignore")" = 1 ] \
