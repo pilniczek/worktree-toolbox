@@ -116,6 +116,10 @@ How an entry `<path>` becomes `<worktree>/<path>` from `<main>/<path>`. *Copy*: 
 *Hardlink*: its own dir tree with hardlinked files, falling back to copy. *Link*: a symlink, or a
 junction on Windows.
 
+**Submodule stop**:
+The STOP `/worktree-remove` gives when git refuses a worktree with an initialized submodule. It
+prints the checks and the manual removal commands; it never forces.
+
 **Provisioning step**:
 A command in the config file's `steps`, run once when a worktree is created and again on
 `/worktree-heal`.

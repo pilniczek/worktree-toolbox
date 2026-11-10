@@ -64,6 +64,7 @@ The first run should install the expected artifacts; the second should report th
 `test/install-matrix.sh` automates that: one case for install + reinstall (empty
 `.claude/worktree.json`, kept on reinstall), one that runs the create → heal → remove lifecycle (husky hook active) with
 every config key against a local bare `origin` and asserts `git status --porcelain` stays empty, one
+for the named remove refusals (locked, initialized submodule, dirty) and a clean remove, one
 for `worktree-create.sh --repo` (minimal mode, a relative path resolved from a worktree, hand-off
 detected by `.claude/worktree.json`, and the STOP paths), one for config errors (`check`, setup,
 and installer), and one for copy behavior (a dir copy, a failed copy leaves no partial target) and a
@@ -106,6 +107,5 @@ convert to the `C:/...` / `C:\...` form there.
 
 ## Decisions and commits
 
-Significant or contested choices go in `docs/adr/`. Read before re-opening a settled question. The
-directory **does not exist yet** — the ADRs it held moved out with the two tools that left — so
-create it lazily when the next decision needs recording, numbering from `0001`.
+Significant or contested choices go in `docs/adr/`. Read before re-opening a settled question. Number
+new ADRs after the last one.

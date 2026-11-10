@@ -225,9 +225,14 @@ worktree (which has no `EnterWorktree` session to exit). Closing is explicit.
 standing in, so if this session was started inside that worktree, close it afterwards and continue from the main
 checkout; **from the main checkout**, run
 `/worktree-remove <branch>` to close a named one. The wrong combination (an argument inside a worktree, or none from
-main) stops with a hint. It runs `git worktree remove` (refuses if the worktree is dirty) then `git branch -d`, which
+main) stops with a hint. It runs `git worktree remove` (refuses if the worktree is dirty, locked, or holds an initialized
+submodule) then `git branch -d`, which
 deletes the branch **only if it is merged into your trunk** — an unmerged branch is kept and reported, so no commits are
 ever lost. It never force-removes, never uses `git branch -D`, and never touches the remote.
+
+When git refuses, the script names the reason and keeps the worktree. For a locked worktree it prints the unlock
+command. Git refuses any worktree with an initialized submodule, even a clean one, and `--force` would delete the
+submodule commits that were never pushed; the script prints the checks to run first and the manual removal commands.
 
 **From inside the worktree — `/worktree-remove`:**
 
@@ -238,12 +243,12 @@ flowchart TD
   inside -->|"no"| stopA["STOP — nothing to close here<br/>(use /worktree-remove &lt;branch&gt; from main)"]
   inside -->|"yes"| capture["Capture flat + branch from pwd"]
   capture --> findmain["Find main checkout &lt;main&gt;<br/>(first entry of git worktree list)"]
-  findmain --> removedir["worktree-setup.cjs unlink: drop the worktree's own link entries<br/>git -C &lt;main&gt; worktree remove &lt;main&gt;/.claude/worktrees/&lt;flat&gt;<br/>(refuses if the working tree is dirty; then the links are put back)"]
+  findmain --> removedir["worktree-setup.cjs unlink: drop the worktree's own link entries<br/>git -C &lt;main&gt; worktree remove &lt;main&gt;/.claude/worktrees/&lt;flat&gt;<br/>(refuses if locked, holding an initialized submodule, or dirty; then the links are put back)"]
 
   subgraph shared["shared tail — reused by /worktree-remove &lt;branch&gt;"]
     direction TB
-    clean{"Working tree clean?"}
-    clean -->|"no"| stopdirty["STOP — report changes, keep the dir<br/>(no --force; commit or stash first)"]
+    clean{"Removed?"}
+    clean -->|"no"| stopdirty["STOP - name the reason, keep the dir<br/>(locked, submodule stop or dirty; never --force)"]
     clean -->|"yes"| delbranch["git branch -d &lt;branch&gt;<br/>(deletes only if merged into trunk)"]
     delbranch --> merged{"Merged into trunk?"}
     merged -->|"yes"| gone["Branch deleted"]
@@ -271,7 +276,7 @@ flowchart TD
   validate --> live{"A live worktree?<br/>(shows in git worktree list)"}
   live -->|"no"| stopB["STOP — not a live worktree"]
   live -->|"yes"| removedir["worktree-setup.cjs unlink, then<br/>git -C &lt;main&gt; worktree remove &lt;main&gt;/.claude/worktrees/&lt;flat&gt;"]
-  removedir --> rest["Continue in the shared tail of /worktree-remove above<br/>(clean? → git branch -d → merged? → prune → report)"]
+  removedir --> rest["Continue in the shared tail of /worktree-remove above<br/>(removed? → git branch -d → merged? → prune → report)"]
 
   classDef step fill:#eaeaea,stroke:#888,color:#000;
   classDef stop fill:#f8d7da,stroke:#d9534f,color:#000;
