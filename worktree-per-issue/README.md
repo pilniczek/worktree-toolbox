@@ -99,6 +99,8 @@ already has.
   near-instant and adds almost no disk; an install inside the worktree isolates it, main is never
   touched. Falls back to a copy when hardlinks are not supported (e.g. another filesystem).
 - **link** entries point to the main checkout's path.
+- **repos** entries name repos next to the main checkout. One shared link in
+  `.claude/worktrees/` makes `../<name>` reach the same repo from main and from every worktree.
 - **steps** run once per worktree (a marker in the worktree's git dir records it);
   `/worktree-heal` passes `--force` to run them again.
 

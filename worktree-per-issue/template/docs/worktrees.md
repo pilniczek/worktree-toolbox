@@ -77,7 +77,7 @@ flowchart TD
   createnew --> setup
   checkout --> setup
   setup["node scripts/worktree-setup.cjs setup &lt;worktree&gt;<br/>(the script provisions the worktree; idempotent, marker-guarded)"]
-  setup --> nm["copy / hardlink / link entries<br/>(from .claude/worktree.json - existing targets left alone)"]
+  setup --> nm["copy / hardlink / link / repos entries<br/>(from .claude/worktree.json - existing targets left alone)"]
   nm --> steps["steps<br/>(your configured commands, e.g. codegen - run once)"]
   steps --> report["Report NEW vs EXISTING + print WORKTREE_PATH<br/>(the loud after-the-fact safety net)"]
   report --> enter["EnterWorktree (by path)<br/>(the command moves THIS session in — and stay)"]
@@ -104,7 +104,7 @@ flowchart TD
   hasarg -->|"no"| current["Target the CURRENT worktree<br/>(pwd must be inside one — else STOP and ask)"]
   locate --> heal
   current --> heal["node scripts/worktree-setup.cjs setup &lt;worktree&gt; --force<br/>(no session move; ignore the run-once marker)"]
-  heal --> nm["Recreate missing copy / hardlink / link entries"]
+  heal --> nm["Recreate missing copy / hardlink / link entries,<br/>repair repos links"]
   nm --> steps["Re-run ALL steps<br/>(e.g. codegen - regardless of the marker)"]
   steps --> report(["Report the result"])
 
@@ -123,6 +123,7 @@ Once the worktree exists on disk, `scripts/worktree-setup.cjs` sets it up - from
   "copy":     [".env", ".claude/settings.local.json"],
   "hardlink": ["node_modules"],
   "link":     ["fixtures/big-dataset"],
+  "repos": ["other-repo"],
   "steps":    ["npm run generate"]
 }
 ```
@@ -136,12 +137,34 @@ Each key is optional. For an entry `<path>`, setup creates `<worktree>/<path>` f
 | `link` | a symlink to main's path (a junction on Windows; a file there falls back to `copy`) | big data every worktree shares read-only |
 | `steps` | nothing - each command runs in the worktree | codegen, or an install when main has no `node_modules` |
 
+`repos` is different: its entries are folder names of repos **next to** the main checkout, not paths inside it.
+Main reaches `../other-repo` directly. A worktree sits two levels deeper (`.claude/worktrees/<flat>`), so its
+`../other-repo` would point into `.claude/worktrees/`. Setup makes that path work: it creates one shared link
+`.claude/worktrees/other-repo` to `<main>/../other-repo`, so `../other-repo` means the same repo from main and from every
+worktree.
+
+```mermaid
+flowchart LR
+  wt1[".claude/worktrees/T-1"] -->|"../other-repo"| shared[".claude/worktrees/other-repo<br/>(one shared link)"]
+  wt2[".claude/worktrees/T-2"] -->|"../other-repo"| shared
+  shared --> repo["&lt;main&gt;/../other-repo"]
+  main["main checkout"] -->|"../other-repo"| repo
+```
+
+- The link belongs to no worktree: `/worktree-remove` never deletes it.
+- Its name takes the folder a worktree would use, so `/worktree-create other-repo` stops with "already exists".
+- A link that points elsewhere or nowhere is replaced on every setup and heal. A real folder with that name is left
+  alone and reported.
+- A symlink on Unix/macOS, a junction on Windows. A missing repo prints a warning and is skipped.
+
 `node_modules` is an ordinary `hardlink` entry. Its files share inodes with main, so it is near-instant and adds almost
 no disk. A later install inside the worktree isolates it: the package manager replaces packages by atomic rename, so
 main is never changed.
 
 **Rules.**
 
+- These rules cover `copy`, `hardlink` and `link`. A `repos` entry is one folder name: no `/`, `\`, `.` or
+  `..`, each name once (ignoring case).
 - Paths are literal (no globs), relative to the repo root, use `/` as the separator (never `\`), and have no `.` or
   `..` segments.
 - No path may overlap another, in the same or a different key (`fixtures` and `fixtures/a.json` clash). Paths in or

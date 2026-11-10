@@ -20,7 +20,7 @@ The three slash commands (`.claude/commands/worktree-*.md`) carry no logic - eac
 matching `template/scripts/worktree-<name>.sh` and relays its output. The branchy work (mode
 detection, validation, the flat-name rule, the `git worktree` calls) lives in the scripts, so a
 command run costs no prompt reasoning. Worktree setup is the exception to shell: callers run
-`scripts/worktree-setup.cjs` through `wt_setup_cjs` (checks for `node`). That node module owns the config schema (the four keys, every path rule), places the entries, runs the steps,
+`scripts/worktree-setup.cjs` through `wt_setup_cjs` (checks for `node`). That node module owns the config schema (the five keys, every path rule), places the entries, runs the steps,
 and writes the marker; before removal it drops the link entries (`unlink`) and puts them back if git refuses (`relink`). Shared rules live once in `scripts/worktree-common.sh`,
 sourced by all three - edit a shared rule **there**. When you change behavior, edit the script (and
 its `docs/worktree-<name>.md`), not the command file.
@@ -108,13 +108,18 @@ The scope one worktree (one issue / one agent run) addresses.
 
 **Config file**:
 `.claude/worktree.json` in the main checkout, committed. Holds every per-worktree setup choice in
-four keys: `copy`, `hardlink`, `link`, `steps`. Read by `scripts/worktree-setup.cjs`, which
+five keys: `copy`, `hardlink`, `link`, `repos`, `steps`. Read by `scripts/worktree-setup.cjs`, which
 validates it and does the setup.
 
 **Copy / hardlink / link mode**:
 How an entry `<path>` becomes `<worktree>/<path>` from `<main>/<path>`. *Copy*: a real copy.
 *Hardlink*: its own dir tree with hardlinked files, falling back to copy. *Link*: a symlink, or a
 junction on Windows.
+
+**Repo link**:
+A `repos` entry `<name>`: one link `<main>/.claude/worktrees/<name>` to `<main>/../<name>`,
+shared by all worktrees, so `../<name>` resolves the same from main and every worktree. No
+worktree owns it; removal never touches it. See [ADR 0002](../docs/adr/0002-repos-separate-key.md).
 
 **Submodule stop**:
 The STOP `/worktree-remove` gives when git refuses a worktree with an initialized submodule. It
