@@ -56,6 +56,10 @@ branch_exists() {  # local branch or on origin
 # the caller to show last; the WORKTREE_PATH line is machine-read by the caller to EnterWorktree.
 add_worktree() {
   local main="$1" branch="$2" wt="$3" base err
+  if [ -e "$wt" ] || [ -L "$wt" ]; then  # NOSONAR: POSIX sh
+    wt_warn "STOP - $wt already exists (a worktree, a repos link, or a leftover folder). Pick another branch name, or open the existing worktree."
+    return 1
+  fi
   git -C "$main" fetch origin >/dev/null 2>&1 || wt_warn "warn: 'git fetch origin' failed; continuing with local refs."
   git -C "$main" worktree prune
 

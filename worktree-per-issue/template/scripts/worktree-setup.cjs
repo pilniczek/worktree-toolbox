@@ -4,7 +4,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const MODES = ['copy', 'hardlink', 'link'];
-const KEYS = [...MODES, 'steps'];
+const KEYS = [...MODES, 'repos', 'steps'];
 const RESERVED = [['.git'], ['.claude', 'worktrees']];
 const HARDLINK_UNSUPPORTED = ['EXDEV', 'EPERM', 'ENOTSUP', 'EOPNOTSUPP'];
 const COPY_OPTIONS = {
@@ -38,6 +38,12 @@ function pathProblem(entry, segs) {
   if (!segs.every(isPlainSegment)) return "must not contain empty, '.' or '..' segments";
   const reserved = RESERVED.find((r) => overlaps(r, segs));
   return reserved ? `overlaps ${reserved.join('/')}` : null;
+}
+
+function repoLinkProblem(name) {
+  if (name === '') return 'is empty';
+  if (/[/\\]/.test(name) || !isPlainSegment(name)) return 'must be the folder name of a repo next to this one';
+  return null;
 }
 
 function parseConfig(raw) {
@@ -84,11 +90,19 @@ function parseConfig(raw) {
     }
   }
 
+  const repoLinks = [];
+  for (const name of lists.repos) {
+    const problem = repoLinkProblem(name);
+    if (problem) errors.push(`repos "${name}": ${problem}`);
+    else if (repoLinks.some((r) => sameSegment(r, name))) errors.push(`repos "${name}": listed twice`);
+    else repoLinks.push(name);
+  }
+
   lists.steps.forEach((step, i) => {
     if (step.trim() === '') errors.push(`steps[${i}]: is empty`);
   });
 
-  return { errors, entries, steps: lists.steps };
+  return { errors, entries, repoLinks, steps: lists.steps };
 }
 
 function readConfig(file) {
@@ -177,6 +191,43 @@ function place({ mode, entry }, repo, wt) {
   }
 }
 
+function pointsTo(link, target) {
+  try {
+    return fs.realpathSync(link) === fs.realpathSync(target);
+  } catch {
+    return false;
+  }
+}
+
+function createRepoLink(name, dst) {
+  if (process.platform !== 'win32') return fs.symlinkSync(path.join('..', '..', '..', name), dst);
+  return fs.symlinkSync(path.resolve(REPO, '..', name), dst, 'junction');
+}
+
+function placeRepoLink(name) {
+  const src = path.resolve(REPO, '..', name);
+  const dst = path.join(REPO, '.claude', 'worktrees', name);
+  if (!exists(src)) {
+    warn(`repos ${name}: ${src} is missing; skipped.`);
+    return true;
+  }
+  const stat = fs.lstatSync(dst, { throwIfNoEntry: false });
+  if (stat && !stat.isSymbolicLink()) {
+    warn(`repos ${name}: ${dst} is a worktree or folder, not a link; skipped.`);
+    return false;
+  }
+  if (stat && pointsTo(dst, src)) return true;
+  try {
+    if (stat) fs.unlinkSync(dst);
+    fs.mkdirSync(path.dirname(dst), { recursive: true });
+    createRepoLink(name, dst);
+    return true;
+  } catch (e) {
+    warn(`repos ${name}: could not create ${dst}: ${e.message}; skipped.`);
+    return false;
+  }
+}
+
 function runStep(step, wt) {
   const result = spawnSync('sh', ['-c', step], { cwd: wt, stdio: 'inherit' });
   if (result.status === 0) return true;
@@ -216,6 +267,7 @@ function setup(wt, force) {
   }
 
   const results = config.entries.map((entry) => place(entry, REPO, wt));
+  results.push(...config.repoLinks.map(placeRepoLink));
 
   const marker = path.join(gitDir, 'wt-provisioned');
   if (force || !exists(marker)) {

@@ -145,7 +145,7 @@ run_install_test() {
   install_W || fail "worktree-per-issue installer exited nonzero"
   assert_W
   assert_no_clobber
-  json_equals .claude/worktree.json '{"copy":[],"hardlink":[],"link":[],"steps":[]}' \
+  json_equals .claude/worktree.json '{"copy":[],"hardlink":[],"link":[],"repos":[],"steps":[]}' \
     || fail "new config is not empty: $(tr '\n' ' ' < .claude/worktree.json)"
 
   # idempotency: reinstall once more — no clobbers, no duplicate ignores
@@ -173,18 +173,20 @@ resolves_to() {
 }
 
 run_setup_test() {
-  label="SETUP    (copy/hardlink/link/steps, marker, --force; create/heal/remove keep status clean)"
+  label="SETUP    (copy/hardlink/link/repos/steps, marker, --force; create/heal/remove keep status clean)"
   begin_case
 
   printf 'main\n' > .env
   mkdir -p cfg node_modules/pkg fixtures/big .claude
   printf '{}\n' > cfg/local.json; : > node_modules/pkg/index.js; : > fixtures/big/data
+  mkdir -p "$PARENT/other"; : > "$PARENT/other/readme"
   printf '%s\n' .env cfg/ node_modules/ fixtures/ step-ran > .gitignore
   cat > .claude/worktree.json <<'JSON'
 {
   "copy": [".env", "cfg/local.json", "absent.txt"],
   "hardlink": ["node_modules"],
   "link": ["fixtures/big"],
+  "repos": ["other", "gone"],
   "steps": ["printf x >> step-ran", "false"]
 }
 JSON
@@ -203,6 +205,11 @@ JSON
   [ "$wt/node_modules/pkg/index.js" -ef node_modules/pkg/index.js ] || fail "node_modules files are not hardlinked"
   [ -L "$wt/fixtures/big" ] && resolves_to "$wt/fixtures/big" "$TARGET/fixtures/big" || fail "fixtures/big is not a link to main"
   assert_grep 'absent.txt' "$LOG" "create output (missing source)"
+  [ -L "$TARGET/.claude/worktrees/other" ] && resolves_to "$wt/../other" "$PARENT/other" \
+    || fail "../other from the worktree is not the repo next to main"
+  assert_grep 'repos gone' "$LOG" "create output (missing other repo)"
+  sh scripts/worktree-create.sh other >"$PARENT/clash.out" 2>&1 && fail "worktree-create accepted a branch named like an repos"
+  assert_grep 'already exists' "$PARENT/clash.out" "create output (repos name clash)"
   assert_grep "'false' failed" "$LOG" "create output (failing step)"
   [ "$(cat "$wt/step-ran" 2>/dev/null)" = x ] || fail "steps did not run exactly once on create"
   assert_file "$(git -C "$wt" rev-parse --git-dir)/wt-provisioned" "run-once marker"
@@ -230,9 +237,11 @@ JSON
   git worktree remove --force "$TARGET/.claude/worktrees/bare-cli" 2>/dev/null
 
   rm "$wt/fixtures/big"
+  rm "$TARGET/.claude/worktrees/other" && ln -s ../nowhere "$TARGET/.claude/worktrees/other"
   sh scripts/worktree-heal.sh "$branch" >>"$LOG" 2>&1 && fail "worktree-heal exited zero despite a failing step"
   [ "$(cat "$wt/step-ran")" = xx ] || fail "heal did not re-run the steps"
   [ -L "$wt/fixtures/big" ] || fail "heal did not recreate the fixtures/big link"
+  resolves_to "$wt/../other" "$PARENT/other" || fail "heal did not repair the broken repos"
   assert_clean "heal"
 
   node "$TARGET/scripts/worktree-setup.cjs" unlink "$wt" >>"$LOG" 2>&1 || fail "unlink exited nonzero"
@@ -247,6 +256,8 @@ JSON
   sh scripts/worktree-remove.sh "$branch" >>"$LOG" 2>&1 || fail "worktree-remove exited nonzero"
   assert_absent "$wt" "worktree dir after remove"
   assert_file "$TARGET/fixtures/big/data" "main's linked data after remove"
+  [ -L "$TARGET/.claude/worktrees/other" ] || fail "remove dropped the shared repos"
+  assert_file "$PARENT/other/readme" "other repo after remove"
   assert_clean "remove"
 
   report_case "$label"
@@ -481,7 +492,7 @@ run_config_test() {
   label="CONFIG   (worktree.json check: valid config silent, every config error rejected)"
   begin_case
 
-  printf '%s\n' '{"copy":[".env","cfg/a b.json"],"hardlink":["node_modules"],"link":["fixtures/big"],"steps":["npm run gen"]}' > "$PARENT/worktree.json"
+  printf '%s\n' '{"copy":[".env","cfg/a b.json"],"hardlink":["node_modules"],"link":["fixtures/big"],"repos":["other-repo"],"steps":["npm run gen"]}' > "$PARENT/worktree.json"
   node "$SETUP_CJS" check "$PARENT/worktree.json" > "$PARENT/out" 2>&1 && [ ! -s "$PARENT/out" ] || fail "valid config not accepted silently: $(cat "$PARENT/out")"
   printf '{}\n' > "$PARENT/worktree.json"
   node "$SETUP_CJS" check "$PARENT/worktree.json" > "$PARENT/out" 2>&1 && [ ! -s "$PARENT/out" ] || fail "empty config not accepted silently"
@@ -509,12 +520,17 @@ run_config_test() {
   bad_config '{"copy":[".Git/config"]}'                  'copy ".Git/config": overlaps .git'
   bad_config '{"copy":[".CLAUDE/Worktrees/x"]}'          'copy ".CLAUDE/Worktrees/x": overlaps .claude/worktrees'
   bad_config '{"copy":["Fixtures"],"link":["fixtures/a"]}' 'link "fixtures/a": overlaps copy "Fixtures"'
+  bad_config '{"repos":[""]}'                    'repos "": is empty'
+  bad_config '{"repos":["../x"]}'                'repos "../x": must be the folder name'
+  bad_config '{"repos":["a/b"]}'                 'repos "a/b": must be the folder name'
+  bad_config '{"repos":[".."]}'                  'repos "..": must be the folder name'
+  bad_config '{"repos":["x","X"]}'               'repos "X": listed twice'
   bad_config '{"steps":[""]}'                            'steps[0]: is empty'
   bad_config '{"copy":["/x","y"],"steps":"z"}'           'copy "/x": must be relative'
   grep -qF '"steps" must be an array of strings' "$PARENT/err" || fail "errors are not all collected"
   rm -f "$PARENT/init.json"
   node "$SETUP_CJS" init "$PARENT/init.json" copy 'a b.env' steps 'echo "x"' copy .env \
-    && json_equals "$PARENT/init.json" '{"copy":["a b.env",".env"],"hardlink":[],"link":[],"steps":["echo \"x\""]}' \
+    && json_equals "$PARENT/init.json" '{"copy":["a b.env",".env"],"hardlink":[],"link":[],"repos":[],"steps":["echo \"x\""]}' \
     || fail "init did not write the entries in order: $(tr '\n' ' ' < "$PARENT/init.json")"
   node "$SETUP_CJS" init "$PARENT/init.json" 2>/dev/null && fail "init overwrote an existing file"
   for args in '' --frce 'setup' "setup $PARENT --frce" 'unlink' "unlink $PARENT x" 'bogus x' 'check' "init $PARENT/new.json copy" "init $PARENT/new.json bogus x"; do

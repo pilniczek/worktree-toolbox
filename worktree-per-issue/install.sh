@@ -72,8 +72,9 @@ if [ "$INTERACTIVE" = 1 ] && [ ! -f "$CONFIG" ]; then  # NOSONAR: POSIX sh
   say "  copy      paths copied into each worktree (e.g. .env)"
   say "  hardlink  paths rebuilt from hardlinks (e.g. node_modules)"
   say "  link      links to the main checkout (e.g. fixtures/big)"
+  say "  repos     folders of repos next to this one, reachable as ../<name> from every worktree (e.g. other-repo)"
   say "  steps     commands run once per worktree (e.g. npm run generate)"
-  for key in copy hardlink link steps; do
+  for key in copy hardlink link repos steps; do
     while entry="$(ask "  $key")" && [ -n "$entry" ]; do  # NOSONAR: POSIX sh
       set -- "$@" "$key" "$entry"
     done
