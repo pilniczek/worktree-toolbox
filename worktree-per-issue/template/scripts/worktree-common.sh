@@ -10,6 +10,11 @@
 wt_say()  { printf '%s\n' "$*"; return 0; }
 wt_warn() { printf '%s\n' "$*" >&2; return 0; }
 
+sh_quote() {
+  printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+  return 0
+}
+
 # Validate against git's own rule (rejects spaces, `..`, `~^:?*`, and a leading `-` that could be
 # mistaken for a git option). A short or unusual name (e.g. `hotfix`, `feature/tst`) is a valid,
 # deliberate choice — never a reason to stop.

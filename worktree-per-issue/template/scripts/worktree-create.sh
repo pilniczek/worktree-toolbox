@@ -45,11 +45,6 @@ hand_off() {
   return $?
 }
 
-sh_quote() {
-  printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
-  return 0
-}
-
 branch_exists() {  # local branch or on origin
   local main="$1" branch="$2"
   git -C "$main" rev-parse --verify --quiet "refs/heads/$branch" >/dev/null 2>&1 \

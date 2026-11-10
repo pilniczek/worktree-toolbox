@@ -252,6 +252,83 @@ JSON
   report_case "$label"
 }
 
+# --- remove refusals -----------------------------------------------------------------------
+run_remove_stop_test() {
+  label="REMOVE   (locked / submodule / dirty refusals are named; clean removes)"
+  begin_case
+
+  mkdir "$PARENT/sub" && git_init_repo "$PARENT/sub" || fail "submodule repo init failed"
+  git -c protocol.file.allow=always submodule add -q "$PARENT/sub" sub >>"$LOG" 2>&1 || fail "submodule add failed"
+  mkdir -p fixtures/big .claude; : > fixtures/big/data
+  printf 'fixtures/\n' > .gitignore
+  printf '{"link":["fixtures/big"]}\n' > .claude/worktree.json
+  install_W || fail "installer exited nonzero"
+  git add -A && git commit -qm install
+
+  wt_dir() { printf '%s/.claude/worktrees/%s' "$TARGET" "$(echo "$1" | tr / +)"; }
+  mkwt() {
+    git worktree add -q "$(wt_dir "$1")" -b "$1" >>"$LOG" 2>&1 \
+      && node "$TARGET/scripts/worktree-setup.cjs" setup "$(wt_dir "$1")" >>"$LOG" 2>&1
+  }
+  remove() { sh scripts/worktree-remove.sh "$@" >"$PARENT/out" 2>&1; rc=$?; cat "$PARENT/out" >>"$LOG"; return $rc; }
+  assert_kept() {
+    [ -d "$(wt_dir "$1")" ] || fail "$2: worktree dir removed"
+    [ -L "$(wt_dir "$1")/fixtures/big" ] || fail "$2: fixtures/big link not restored"
+    git rev-parse -q --verify "refs/heads/$1" >/dev/null || fail "$2: branch deleted"
+  }
+
+  mkwt t/sub || fail "t/sub worktree setup failed"
+  git -C "$(wt_dir t/sub)" -c protocol.file.allow=always submodule update -q --init >>"$LOG" 2>&1 \
+    || fail "submodule init failed"
+  : > "$(wt_dir t/sub)/untracked"
+  remove t/sub && fail "worktree-remove removed a worktree with an initialized submodule"
+  assert_grep 'submodule foreach --recursive' "$PARENT/out" "submodule stop output"
+  assert_grep "worktree-setup.cjs' unlink" "$PARENT/out" "submodule stop output"
+  grep -qF 'Uncommitted' "$PARENT/out" && fail "submodule stop reported as uncommitted changes"
+  assert_grep '?? untracked' "$PARENT/out" "submodule stop output (worktree's own changes)"
+  assert_kept t/sub "submodule stop"
+  assert_file "$(wt_dir t/sub)/sub/.git" "submodule gitlink after submodule stop"
+  ( cd "$(wt_dir t/sub)" && sh scripts/worktree-remove.sh ) >"$PARENT/out" 2>&1 \
+    && fail "worktree-remove from inside removed a worktree with an initialized submodule"
+  assert_grep 'submodule foreach --recursive' "$PARENT/out" "inside submodule stop output"
+  assert_grep 'git stash list' "$PARENT/out" "inside submodule stop output"
+
+  det="$TARGET/.claude/worktrees/t+det"
+  git worktree add -q --detach "$det" >>"$LOG" 2>&1 \
+    && node "$TARGET/scripts/worktree-setup.cjs" setup "$det" >>"$LOG" 2>&1 \
+    && git -C "$det" -c protocol.file.allow=always submodule update -q --init >>"$LOG" 2>&1 \
+    || fail "detached worktree setup failed"
+  ( cd "$det" && sh scripts/worktree-remove.sh ) >"$PARENT/out" 2>&1 \
+    && fail "worktree-remove removed a detached worktree with an initialized submodule"
+  assert_grep 'submodule foreach --recursive' "$PARENT/out" "detached submodule stop output"
+  grep -qF 'branch -d' "$PARENT/out" && fail "detached submodule stop suggests deleting a branch"
+
+  locked="t/lo'ck"
+  mkwt "$locked" || fail "$locked worktree setup failed"
+  git worktree lock "$(wt_dir "$locked")"
+  remove "$locked" && fail "worktree-remove removed a locked worktree"
+  assert_grep 'worktree unlock' "$PARENT/out" "locked stop output"
+  assert_kept "$locked" "locked stop"
+  sh -c "$(grep -F 'worktree unlock' "$PARENT/out" | sed 's/^ *//')" >>"$LOG" 2>&1 \
+    || fail "printed unlock command failed for a path with a single quote"
+  git worktree list --porcelain | grep -qx locked && fail "printed unlock command left the worktree locked"
+
+  mkwt t/dirty || fail "t/dirty worktree setup failed"
+  : > "$(wt_dir t/dirty)/untracked"
+  remove t/dirty && fail "worktree-remove removed a dirty worktree"
+  assert_grep 'Uncommitted or untracked changes' "$PARENT/out" "dirty stop output"
+  assert_grep '?? untracked' "$PARENT/out" "dirty stop output"
+  assert_kept t/dirty "dirty stop"
+
+  mkwt t/clean || fail "t/clean worktree setup failed"
+  remove t/clean || fail "worktree-remove refused a clean worktree: $(tr '\n' ' ' < "$PARENT/out")"
+  assert_absent "$(wt_dir t/clean)" "clean worktree dir after remove"
+  git rev-parse -q --verify refs/heads/t/clean >/dev/null && fail "merged branch t/clean not deleted"
+  assert_file "$TARGET/fixtures/big/data" "main's linked data after remove"
+
+  report_case "$label"
+}
+
 # --- other repos ---------------------------------------------------------------------------
 add_origin() {  # $1 = repo dir - bare clone beside it as origin, with origin/HEAD set.
   git clone -q --bare "$1" "$1.git" \
@@ -487,6 +564,7 @@ echo ""
 
 run_install_test
 run_setup_test
+run_remove_stop_test
 run_repo_test
 run_config_test
 run_fallback_test

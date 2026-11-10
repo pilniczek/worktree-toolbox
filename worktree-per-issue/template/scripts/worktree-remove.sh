@@ -51,14 +51,36 @@ if ! wt_setup_cjs "$MAIN" unlink "$WT"; then
   wt_warn "STOP - could not drop the worktree's links, so it was not removed. Run /worktree-heal to restore any it dropped."
   exit 1
 fi
-if ! err="$(git -C "$MAIN" worktree remove "$WT" 2>&1)"; then
+# Git localizes its messages; the refusal is classified by its English text.
+if ! err="$(LC_ALL=C git -C "$MAIN" worktree remove "$WT" 2>&1)"; then
   wt_setup_cjs "$MAIN" relink "$WT" >&2 \
     || wt_warn "warn: could not restore the worktree's links (see above); run /worktree-heal to retry."
   wt_warn "STOP - could not remove the worktree (not forcing):"
   wt_warn "$err"
-  wt_warn "Uncommitted or untracked changes in $WT:"
+  wt_warn "Changes in $WT (none if empty):"
   git -C "$WT" status --short >&2 2>/dev/null || true
-  wt_warn "Commit or stash them (or remove with --force yourself if you're sure), then retry."
+  case "$err" in
+    *"cannot remove a locked working tree"*)
+      wt_warn "The worktree is locked. Unlock it, then retry /worktree-remove:"
+      wt_warn "  git -C $(sh_quote "$MAIN") worktree unlock $(sh_quote "$WT")" ;;
+    *"containing submodules"*)
+      wt_warn "Git refuses any worktree with an initialized submodule, even a clean one."
+      wt_warn "--force would delete this worktree's copy of each submodule repository, including"
+      wt_warn "commits never pushed, and every change listed above."
+      wt_warn "Check the submodules too (empty output for every submodule = nothing to lose there):"
+      wt_warn "  git -C $(sh_quote "$WT") submodule foreach --recursive 'git status --short; git stash list; git log --oneline HEAD --branches --not --remotes'"
+      wt_warn "Then, if sure, run these in order (drop the links first, or --force on Git for Windows"
+      wt_warn "empties the main checkout's linked directories):"
+      wt_warn "  node $(sh_quote "$MAIN/scripts/worktree-setup.cjs") unlink $(sh_quote "$WT")"
+      wt_warn "  git -C $(sh_quote "$MAIN") worktree remove --force $(sh_quote "$WT")"
+      if [ -n "$BRANCH" ] && [ "$BRANCH" != HEAD ]; then  # NOSONAR: POSIX sh
+        wt_warn "  git -C $(sh_quote "$MAIN") branch -d $(sh_quote "$BRANCH")"
+      fi
+      wt_warn "Do not rerun /worktree-remove afterwards: with the worktree gone it stops with \"No live worktree\"." ;;
+    *"modified or untracked files"*)
+      wt_warn "Uncommitted or untracked changes are listed above. Commit or stash them (or remove with --force yourself if you're sure), then retry." ;;
+    *) ;;
+  esac
   exit 1
 fi
 
@@ -83,7 +105,7 @@ case "$BRANCH_RESULT" in
     wt_say "Branch '$BRANCH' was merged into trunk → deleted." ;;
   kept)
     wt_say "Branch '$BRANCH' is NOT merged → KEPT (commits are safe). Delete it later with"
-    wt_say "  git branch -d '$BRANCH'   (after it merges)   or   git branch -D '$BRANCH'   (if you're sure)."
+    wt_say "  git branch -d $(sh_quote "$BRANCH")   (after it merges)   or   git branch -D $(sh_quote "$BRANCH")   (if you're sure)."
     wt_say "The remote branch was not touched." ;;
   *) ;;   # detached/deleted/kept above are exhaustive; defensive default (S131)
 esac
