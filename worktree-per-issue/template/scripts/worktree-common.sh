@@ -11,7 +11,8 @@ wt_say()  { printf '%s\n' "$*"; return 0; }
 wt_warn() { printf '%s\n' "$*" >&2; return 0; }
 
 sh_quote() {
-  printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+  local value="$1"
+  printf "'%s'" "$(printf '%s' "$value" | sed "s/'/'\\\\''/g")"
   return 0
 }
 

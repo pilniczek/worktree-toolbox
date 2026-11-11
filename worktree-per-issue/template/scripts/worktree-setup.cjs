@@ -6,7 +6,7 @@ const { spawnSync } = require('node:child_process');
 const MODES = ['copy', 'hardlink', 'link'];
 const KEYS = [...MODES, 'repos', 'steps'];
 const RESERVED = [['.git'], ['.claude', 'worktrees']];
-const HARDLINK_UNSUPPORTED = ['EXDEV', 'EPERM', 'ENOTSUP', 'EOPNOTSUPP'];
+const HARDLINK_UNSUPPORTED = new Set(['EXDEV', 'EPERM', 'ENOTSUP', 'EOPNOTSUPP']);
 const COPY_OPTIONS = {
   recursive: true,
   force: false,
@@ -27,7 +27,7 @@ class ExitError extends Error {
 }
 
 const sameSegment = (a, b) => a.toLowerCase() === b.toLowerCase();
-const isPrefix = (a, b) => a.length <= b.length && a.every((seg, i) => sameSegment(seg, b[i]));
+const isPrefix = (prefix, segs) => prefix.length <= segs.length && prefix.every((seg, i) => sameSegment(seg, segs[i]));
 const overlaps = (a, b) => isPrefix(a, b) || isPrefix(b, a);
 const isPlainSegment = (seg) => seg !== '' && seg !== '.' && seg !== '..';
 
@@ -46,17 +46,7 @@ function repoLinkProblem(name) {
   return null;
 }
 
-function parseConfig(raw) {
-  const errors = [];
-  let config;
-  try {
-    config = JSON.parse(raw);
-  } catch (e) {
-    return { errors: [`not valid JSON: ${e.message}`], entries: [], steps: [] };
-  }
-  if (config === null || typeof config !== 'object' || Array.isArray(config)) {
-    return { errors: [`must be a JSON object with the keys ${KEYS.join(', ')}`], entries: [], steps: [] };
-  }
+function readLists(config, errors) {
   for (const key of Object.keys(config)) {
     if (!KEYS.includes(key)) errors.push(`unknown key "${key}" (allowed: ${KEYS.join(', ')})`);
   }
@@ -74,7 +64,10 @@ function parseConfig(raw) {
       return false;
     });
   }
+  return lists;
+}
 
+function collectEntries(lists, errors) {
   const entries = [];
   for (const mode of MODES) {
     for (const entry of lists[mode]) {
@@ -89,15 +82,35 @@ function parseConfig(raw) {
       else entries.push({ mode, entry, segs });
     }
   }
+  return entries;
+}
 
+function collectRepoLinks(names, errors) {
   const repoLinks = [];
-  for (const name of lists.repos) {
+  for (const name of names) {
     const problem = repoLinkProblem(name);
     if (problem) errors.push(`repos "${name}": ${problem}`);
     else if (repoLinks.some((r) => sameSegment(r, name))) errors.push(`repos "${name}": listed twice`);
     else repoLinks.push(name);
   }
+  return repoLinks;
+}
 
+function parseConfig(raw) {
+  let config;
+  try {
+    config = JSON.parse(raw);
+  } catch (e) {
+    return { errors: [`not valid JSON: ${e.message}`], entries: [], steps: [] };
+  }
+  if (config === null || typeof config !== 'object' || Array.isArray(config)) {
+    return { errors: [`must be a JSON object with the keys ${KEYS.join(', ')}`], entries: [], steps: [] };
+  }
+
+  const errors = [];
+  const lists = readLists(config, errors);
+  const entries = collectEntries(lists, errors);
+  const repoLinks = collectRepoLinks(lists.repos, errors);
   lists.steps.forEach((step, i) => {
     if (step.trim() === '') errors.push(`steps[${i}]: is empty`);
   });
@@ -157,7 +170,7 @@ function hardlinkEntry(src, dst) {
     hardlinkTree(src, dst);
   } catch (e) {
     removeTree(dst);
-    if (!HARDLINK_UNSUPPORTED.includes(e.code)) throw e;
+    if (!HARDLINK_UNSUPPORTED.has(e.code)) throw e;
     warn(`hardlinks are not supported for ${dst} (${e.code}); copying instead.`);
     copyEntry(src, dst);
   }
@@ -229,7 +242,7 @@ function placeRepoLink(name) {
 }
 
 function runStep(step, wt) {
-  const result = spawnSync('sh', ['-c', step], { cwd: wt, stdio: 'inherit' });
+  const result = spawnSync('sh', ['-c', step], { cwd: wt, stdio: 'inherit' }); // NOSONAR: sh resolves from PATH, its location differs per machine (Git Bash on Windows)
   if (result.status === 0) return true;
   warn(`'${step}' failed; run it manually in the worktree.`);
   return false;
@@ -239,7 +252,7 @@ const REPO = path.dirname(__dirname);
 const CONFIG_FILE = path.join(REPO, '.claude', 'worktree.json');
 
 function worktreeGitDir(wt) {
-  const result = spawnSync('git', ['-C', wt, 'rev-parse', '--git-dir', '--git-common-dir'], { encoding: 'utf8' });
+  const result = spawnSync('git', ['-C', wt, 'rev-parse', '--git-dir', '--git-common-dir'], { encoding: 'utf8' }); // NOSONAR: git resolves from PATH, its location differs per machine
   if (result.status !== 0) return null;
   const [gitDir, commonDir] = result.stdout.trim().split('\n').map((dir) => fs.realpathSync(path.resolve(wt, dir)));
   const isLinkedWorktree = gitDir !== commonDir && commonDir === fs.realpathSync(path.join(REPO, '.git'));
